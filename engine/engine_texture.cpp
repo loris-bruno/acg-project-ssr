@@ -44,6 +44,7 @@ struct Eng::Texture::Reserved
    
    GLuint oglId;                    ///< OpenGL texture ID   
    GLuint64 oglBindlessHandle;      ///< GL_ARB_bindless_texture special handle
+   GLuint oglInternalFormat;        ///< OpenGL internal format enum
 
 
    /**
@@ -605,6 +606,21 @@ bool ENG_API Eng::Texture::create(uint32_t sizeX, uint32_t sizeY, Format format)
    this->setSizeX(sizeX);
    this->setSizeY(sizeY);
 	return true;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Binds image for imagestore operations.
+ * @param location location to bind the texture on
+ * @return TF
+ */
+bool ENG_API Eng::Texture::bindImage(uint32_t location)
+{
+   //glBindImageTexture(location, reserved->glId, 0, layered, 0, GL_WRITE_ONLY, GL_RGBA32F);   
+   //glBindImageTexture(location, reserved->glId, 0, layered, 0, GL_WRITE_ONLY, GL_R8);
+   glBindImageTexture(location, reserved->oglId, 0, GL_FALSE, 0, GL_WRITE_ONLY, reserved->oglInternalFormat);
+   return true;
 }
 
 

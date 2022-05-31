@@ -7,20 +7,20 @@
 
 
 
-//////////////
-// #INCLUDE //
-//////////////
+ //////////////
+ // #INCLUDE //
+ //////////////
 
-   // Main include:
-   #include "engine.h"
+    // Main include:
+#include "engine.h"
 
-   // GLM:
-   #include <glm/gtc/packing.hpp>  
+// GLM:
+#include <glm/gtc/packing.hpp>  
 
-   // OGL:      
-   #include <GL/glew.h>
-   #include <GLFW/glfw3.h>
-   
+// OGL:      
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+
 
 
 ////////////
@@ -28,7 +28,7 @@
 ////////////
 
    // Special values:
-   Eng::Mesh Eng::Mesh::empty("[empty]");
+Eng::Mesh Eng::Mesh::empty("[empty]");
 
 
 
@@ -40,7 +40,7 @@
  * @brief Mesh class reserved structure.
  */
 struct Eng::Mesh::Reserved
-{  
+{
    // Buffers:
    Eng::Vao vao;
    Eng::Vbo vbo;
@@ -48,12 +48,15 @@ struct Eng::Mesh::Reserved
 
    // Material:
    std::reference_wrapper<const Eng::Material> material;
-   
+
+   // Bounding volumes:
+   float radius;
+
 
    /**
     * Constructor
     */
-   Reserved() : material{ Eng::Material::empty }
+   Reserved() : material{ Eng::Material::empty }, radius{ 1.0f }
    {}
 };
 
@@ -68,8 +71,8 @@ struct Eng::Mesh::Reserved
  * Constructor.
  */
 ENG_API Eng::Mesh::Mesh() : reserved(std::make_unique<Eng::Mesh::Reserved>())
-{	
-   ENG_LOG_DETAIL("[+]");   
+{
+   ENG_LOG_DETAIL("[+]");
 }
 
 
@@ -78,19 +81,19 @@ ENG_API Eng::Mesh::Mesh() : reserved(std::make_unique<Eng::Mesh::Reserved>())
  * Constructor with name.
  * @param name mesh name
  */
-ENG_API Eng::Mesh::Mesh(const std::string &name) : Eng::Node(name),  reserved(std::make_unique<Eng::Mesh::Reserved>())
-{	
-   ENG_LOG_DETAIL("[+]");   
+ENG_API Eng::Mesh::Mesh(const std::string& name) : Eng::Node(name), reserved(std::make_unique<Eng::Mesh::Reserved>())
+{
+   ENG_LOG_DETAIL("[+]");
 }
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
- * Move constructor. 
+ * Move constructor.
  */
-ENG_API Eng::Mesh::Mesh(Mesh &&other) : Eng::Node(std::move(other)), reserved(std::move(other.reserved))
-{  
-   ENG_LOG_DETAIL("[M]");   
+ENG_API Eng::Mesh::Mesh(Mesh&& other) : Eng::Node(std::move(other)), reserved(std::move(other.reserved))
+{
+   ENG_LOG_DETAIL("[M]");
 }
 
 
@@ -100,19 +103,19 @@ ENG_API Eng::Mesh::Mesh(Mesh &&other) : Eng::Node(std::move(other)), reserved(st
  */
 ENG_API Eng::Mesh::~Mesh()
 {
-   ENG_LOG_DETAIL("[-]");   
+   ENG_LOG_DETAIL("[-]");
 }
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
- * Sets material. 
- * @param mat material 
+ * Sets material.
+ * @param mat material
  * @return TF
  */
-bool ENG_API Eng::Mesh::setMaterial(const Eng::Material &mat)
-{  
-   reserved->material = mat;      
+bool ENG_API Eng::Mesh::setMaterial(const Eng::Material& mat)
+{
+   reserved->material = mat;
 
    // Done:
    return true;
@@ -121,12 +124,45 @@ bool ENG_API Eng::Mesh::setMaterial(const Eng::Material &mat)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
- * Gets material.  
+ * Gets material.
  * @return used material or Material::empty if not set
  */
-const Eng::Material ENG_API &Eng::Mesh::getMaterial() const
+const Eng::Material ENG_API& Eng::Mesh::getMaterial() const
 {
    return reserved->material;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Gets a reference to the used VBO.
+ * @return reference to used VBO
+ */
+const Eng::Vbo ENG_API& Eng::Mesh::getVbo() const
+{
+   return reserved->vbo;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Gets a reference to the used EBO.
+ * @return reference to used EBO
+ */
+const Eng::Ebo ENG_API& Eng::Mesh::getEbo() const
+{
+   return reserved->ebo;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Gets the bounding sphere radius for this mesh.
+ * @return bounding sphere radius
+ */
+const float ENG_API Eng::Mesh::getRadius() const
+{
+   return reserved->radius;
 }
 
 
@@ -137,7 +173,7 @@ const Eng::Material ENG_API &Eng::Mesh::getMaterial() const
  * @param data optional pointer
  * @return TF
  */
-uint32_t ENG_API Eng::Mesh::loadChunk(Eng::Serializer &serial, void *data)
+uint32_t ENG_API Eng::Mesh::loadChunk(Eng::Serializer& serial, void* data)
 {
    // Chunk header
    uint32_t chunkId;
@@ -152,7 +188,7 @@ uint32_t ENG_API Eng::Mesh::loadChunk(Eng::Serializer &serial, void *data)
 
    // Node properties:       
    std::string name;
-   serial.deserialize(name);   
+   serial.deserialize(name);
    this->setName(name);
 
    glm::mat4 matrix;
@@ -163,20 +199,19 @@ uint32_t ENG_API Eng::Mesh::loadChunk(Eng::Serializer &serial, void *data)
    serial.deserialize(nrOfChildren);
 
    std::string target;
-   serial.deserialize(target);   
+   serial.deserialize(target);
 
    // Data:
    uint8_t subtype;
    serial.deserialize(subtype);
-   
+
    std::string materialName;
-   serial.deserialize(materialName);      
+   serial.deserialize(materialName);
    std::reference_wrapper<const Eng::Material> mat = Eng::Material::empty;
-   mat = dynamic_cast<Eng::Material &>(Eng::Container::getInstance().find(materialName));
+   mat = dynamic_cast<Eng::Material&>(Eng::Container::getInstance().find(materialName));
    this->setMaterial(mat);
 
-   float radius;
-   serial.deserialize(radius);
+   serial.deserialize(reserved->radius);
 
    glm::vec3 bboxMin;
    serial.deserialize(bboxMin);
@@ -216,11 +251,11 @@ uint32_t ENG_API Eng::Mesh::loadChunk(Eng::Serializer &serial, void *data)
       {
          reserved->vao.init();
          reserved->vao.render();
-         
+
          reserved->vbo.create(nrOfVertices, allVertices.data());
          reserved->ebo.create(nrOfFaces, allFaces.data());
       }
-   }   
+   }
 
    // Done:      
    return nrOfChildren;
@@ -229,26 +264,22 @@ uint32_t ENG_API Eng::Mesh::loadChunk(Eng::Serializer &serial, void *data)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
- * Rendering method. 
+ * Rendering method.
  * @param value generic value
  * @param data generic pointer to any kind of data
  * @return TF
  */
-bool ENG_API Eng::Mesh::render(uint32_t value, void *data) const
-{	
-   Eng::Program &program = dynamic_cast<Eng::Program &>(Eng::Program::getCached());
-   
-   Eng::List::RenderableElemInfo* info = (Eng::List::RenderableElemInfo*)data;
-
-   program.setMat4("modelMat", info->objMatrix);
-   program.setMat4("viewMat", info->camMatrix);
-   program.setMat3("normalMat", glm::inverseTranspose(glm::mat3(info->objMatrix)));
+bool ENG_API Eng::Mesh::render(uint32_t value, void* data) const
+{
+   Eng::Program& program = dynamic_cast<Eng::Program&>(Eng::Program::getCached());
+   program.setMat4("modelviewMat", *((glm::mat4*)data));
+   program.setMat3("normalMat", glm::inverseTranspose(glm::mat3(*((glm::mat4*)data))));
 
    reserved->material.get().render();
-  
-   reserved->vao.render();   
+
+   reserved->vao.render();
    glDrawElements(GL_TRIANGLES, reserved->ebo.getNrOfFaces() * 3, GL_UNSIGNED_INT, nullptr);
-   
+
    // Done:
    return true;
 }

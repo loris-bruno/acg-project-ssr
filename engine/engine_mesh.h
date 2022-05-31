@@ -1,6 +1,6 @@
 /**
  * @file		engine_mesh.h
- * @brief	Geometric mesh 
+ * @brief	Geometric mesh
  *
  * @author	Achille Peternier (achille.peternier@supsi.ch), (C) SUPSI
  */
@@ -13,35 +13,38 @@
   */
 class ENG_API Mesh : public Eng::Node
 {
-//////////
+   //////////
 public: //
 //////////
 
    // Special values:
    static Mesh empty;
-   
+
 
    // Const/dest:
    Mesh();
-   Mesh(Mesh &&other);
-   Mesh(Mesh const &) = delete;
-   ~Mesh();   
+   Mesh(Mesh&& other);
+   Mesh(Mesh const&) = delete;
+   ~Mesh();
 
    // Operators:
    void operator=(Mesh const&) = delete;
 
    // Get/set:
-   bool setMaterial(const Eng::Material &mat);
-   const Eng::Material &getMaterial() const;
-   
+   bool setMaterial(const Eng::Material& mat);
+   const Eng::Material& getMaterial() const;
+   const Eng::Vbo& getVbo() const;
+   const Eng::Ebo& getEbo() const;
+   const float getRadius() const;
+
    // Rendering methods:   
-   bool render(uint32_t value = 0, void *data = nullptr) const;   
+   bool render(uint32_t value = 0, void* data = nullptr) const;
 
    // Ovo:   
-   uint32_t loadChunk(Eng::Serializer &serial, void *data = nullptr);
+   uint32_t loadChunk(Eng::Serializer& serial, void* data = nullptr);
 
 
-///////////
+   ///////////
 private: //
 ///////////
 
@@ -50,7 +53,7 @@ private: //
    std::unique_ptr<Reserved> reserved;
 
    // Const/dest:
-   Mesh(const std::string &name);
+   Mesh(const std::string& name);
 };
 
 
