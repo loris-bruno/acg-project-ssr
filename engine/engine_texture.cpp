@@ -51,7 +51,7 @@ struct Eng::Texture::Reserved
     * Constructor. 
     */
    Reserved() : bitmap{ Eng::Bitmap::empty }, format{ Eng::Texture::Format::none }, size{ 0, 0, 1 },
-                oglId{ 0 }, oglBindlessHandle{ 0 }
+                oglId{ 0 }, oglBindlessHandle{ 0 }, oglInternalFormat { 0 }
    {}
 };
 

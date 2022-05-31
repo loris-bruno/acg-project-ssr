@@ -33,6 +33,7 @@
    Eng::PipelineDefault dfltPipe;
    Eng::PipelineFullscreen2D full2dPipe;
    Eng::PipelineFullscreenLighting lightingPipe;
+   Eng::PipelineRayTracing raytracingPipe;
 
 
 
