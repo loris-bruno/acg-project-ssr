@@ -128,6 +128,26 @@ layout(std430, binding=3) buffer MaterialData
 };  
 
 
+//////////////
+// RAY DATA //
+//////////////
+
+struct RayStruct
+{
+   vec3 worldPos;
+   vec2 screenPos;
+   vec3 rayDir;
+   vec3 color;
+   
+   float distance;
+}
+
+layout(shared, binding=0) buffer RayData
+{
+   RayStruct rays[];
+}
+
+
 
 ///////////////////
 // LOCAL STRUCTS //
@@ -171,6 +191,7 @@ struct HitInfo
    uniform uint nrOfLights;
    uniform uint nrOfBSpheres;
    uniform uint nrOfMaterials;
+   uniform uint nrOfRays;
    uniform vec4 eyePosition;
    uniform vec4 ray00;
    uniform vec4 ray01;
@@ -303,7 +324,6 @@ bool intersect(const Ray ray, out HitInfo info)
                   info.v = v;
                   vec2 uv = triangle[i].u[1] * u + triangle[i].u[2] * v + (1.0f - u - v) * triangle[i].u[0];
                   info.color = texture(sampler2D(materials[triangle[i].matId].albedoTexHandle), uv).rgb;
-                  
          }
       }
 
@@ -463,6 +483,7 @@ struct Eng::PipelineRayTracing::Reserved
    Eng::Ssbo lights;          ///< List of lights in world coords
    Eng::Ssbo bspheres;        ///< List of bounding spheres in world coords
    Eng::Ssbo materials;       ///< List of materials
+   Eng::Ssbo rayData;         ///< List of ray data, populated 
    Eng::Texture colorBuffer;  ///< Output image of the ray tracer
 
    // Scene-specific:
@@ -475,7 +496,7 @@ struct Eng::PipelineRayTracing::Reserved
    /**
     * Constructor. 
     */
-   Reserved() : nrOfTriangles{ 0 }, nrOfLights{ 0 }, nrOfBSpheres{ 0 }
+   Reserved() : nrOfTriangles{ 0 }, nrOfLights{ 0 }, nrOfBSpheres{ 0 }, nrOfMaterials{ 0 }
    {}
 };
 
@@ -556,6 +577,12 @@ bool ENG_API Eng::PipelineRayTracing::init()
    Eng::Base &eng = Eng::Base::getInstance();
    reserved->colorBuffer.create(eng.getWindowSize().x, eng.getWindowSize().y, Eng::Texture::Format::r8g8b8a8);   
    
+   // Create SSBO and counter for ray data:
+   int width = eng.getWindowSize().x;
+   int height = eng.getWindowSize().y;
+   reserved->rayData.create(sizeof(RayStruct) * width * height, nullptr);
+
+   
    // Done: 
    this->setDirty(false);
    return true;
@@ -579,7 +606,7 @@ bool ENG_API Eng::PipelineRayTracing::free()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
- * Gets the color buffer used as ray tracing output.
+ * Gets t color buffer used as ray tracing output.
  * @return color buffer texture reference
  */
 const Eng::Texture ENG_API &Eng::PipelineRayTracing::getColorBuffer() const

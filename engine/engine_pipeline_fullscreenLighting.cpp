@@ -74,6 +74,27 @@ uniform mat4 lightMatrix;     // Transformation into light space
 
 const float PI = 3.14159265359;
 
+//////////////
+// RAY DATA //
+//////////////
+
+struct RayStruct
+{
+   vec3 worldPos;
+   vec2 screenPos;
+   vec3 rayDir;
+   vec3 color;
+   
+   float distance;
+};
+
+layout (binding = 0, offset = 0) uniform atomic_uint counter;
+
+layout(shared, binding=0) buffer RayData
+{
+   RayStruct rays[];
+};
+
 /**
  * Computes the amount of shadow for a given fragment.
  * @param fragPosLightSpace frament coords in light space
@@ -161,7 +182,7 @@ void main()
    }
 
    vec3 halfVector = normalize(lightDir + viewDir);
-   float cosTheta = max(dot(halfVector,viewDir), .0f);
+   float cosTheta = max(dot(pixWorldNormal.xyz,viewDir), .0f);
    vec3 F0 = mix(vec3(.04f), pixMaterial.rgb, pixWorldNormal.w);
    
    //float distance = length(pixWorldPos.xyz - lightPos.xyz);
@@ -178,8 +199,7 @@ void main()
    
    vec3 specular = num / denum;
   
-   vec3 kD = vec3(1.f) - F;
-        kD *= 1.f - pixWorldNormal.w;
+   vec3 kD = (vec3(1.f) - F) * (1.f - pixWorldNormal.w);
    
    vec3 lighting = (kD * pixMaterial.xyz / PI + specular) * radiance *  max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f);
    lighting = pow(lighting, vec3(1.f/2.2f));
@@ -189,8 +209,55 @@ void main()
    color += lighting * (1.f - shadow);
    //color += lighting;
 
-   outFragment = vec4(color.xyz, 1.0);
-})";
+   outFragment = vec4(vec3(1.0f) - kD, 1.0);
+}
+
+
+/*
+void main()
+{
+   // Texture lookup:
+   vec4 pixWorldPos     = texture(texture0, uv);
+   vec4 pixWorldNormal  = texture(texture1, uv);
+   vec4 pixMaterial     = texture(texture2, uv);
+
+   vec3 color = pixMaterial.xyz * .3f;       // hardcoded ambient term
+
+
+   vec3 viewDir = normalize(camPos.xyz - pixWorldPos.xyz);
+   vec3 lightDir = normalize(lightPos.xyz - pixWorldPos.xyz);
+
+   
+   if (dot(pixWorldNormal.xyz, viewDir.xyz) < 0.0f){
+      outFragment = vec4(color, 1.f);
+      return;
+   }
+
+   vec3 halfVector = normalize(lightDir + viewDir);
+   float cosTheta = max(dot(halfVector,viewDir), .0f);
+   vec3 F0 = mix(vec3(.04f), pixMaterial.rgb, pixWorldNormal.w);
+
+   float attenuation = 1.f;
+   vec3 radiance = lightCol * attenuation;
+
+   vec3 F = fresnelSchlick(cosTheta, F0);
+   vec3 kS = F;
+   vec3 kD = vec3(1.f) - kS;
+        kD += 1.f - pixWorldNormal.w;
+
+   
+   vec3 lighting = (kD * pixMaterial.xyz / PI) * radiance *  max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f);
+   lighting = pow(lighting, vec3(1.f/2.2f));
+      
+   float shadow = shadowAmount(lightMatrix * pixWorldPos);
+
+   color += lighting * (1.f - shadow);
+   //color += lighting;
+
+   outFragment = vec4(color.rgb, 1.0);
+}
+*/
+)";
 
 
 
@@ -208,11 +275,15 @@ struct Eng::PipelineFullscreenLighting::Reserved
    Eng::Program program;      
    Eng::Vao vao;  ///< Dummy VAO, always required by context profiles
 
+   Eng::AtomicCounter counter;
+   Eng::Ssbo rayData;
+
+   int32_t nrOfRays;
 
    /**
     * Constructor. 
     */
-   Reserved()
+   Reserved() : nrOfRays{0}
    {}
 };
 
@@ -297,6 +368,12 @@ bool ENG_API Eng::PipelineFullscreenLighting::init()
       return false;
    }
 
+   glm::ivec2 windowSize = Eng::Base::getInstance().getWindowSize();
+
+   reserved->rayData.create(windowSize.x * windowSize.y * sizeof(Eng::PipelineRayTracing::RayStruct));
+   reserved->counter.create(sizeof(GLuint));
+   reserved->counter.reset();
+
    // Done: 
    this->setDirty(false);
    return true;
@@ -315,6 +392,10 @@ bool ENG_API Eng::PipelineFullscreenLighting::free()
 
    // Done:   
    return true;
+}
+
+int32_t ENG_API Eng::PipelineFullscreenLighting::getNrOfRays() {
+   return reserved->nrOfRays;
 }
 
 
@@ -358,6 +439,7 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
    geometries.getNormalBuffer().render(1);
    geometries.getMaterialBuffer().render(2);
    shadowmap.getShadowMap().render(3);
+   reserved->counter.render(0);
 
    
    glm::mat4 camMat = Eng::Camera::getCached().getMatrix();
@@ -390,6 +472,11 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
    // Smart trick:   
    reserved->vao.render();
    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+   reserved->counter.read(&reserved->nrOfRays);
+   reserved->counter.reset();
+
+   ENG_LOG_DEBUG(std::to_string(reserved->nrOfRays).c_str());
   
    // Done:   
    return true;

@@ -32,6 +32,9 @@ public: //
    bool init() override;
    bool free() override;
 
+   // Get/Set:
+   int32_t getNrOfRays();
+
 
 /////////////
 protected: //

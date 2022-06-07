@@ -138,7 +138,6 @@ struct Eng::PipelineGeometry::Reserved
    Eng::Texture depthTex;     // albedo rgb, alpha roughness
    Eng::Fbo fbo;
 
-
    /**
     * Constructor. 
     */
@@ -239,7 +238,6 @@ const Eng::Texture ENG_API& Eng::PipelineGeometry::getDepthBuffer() const
 {
    return reserved->depthTex;
 }
-
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
@@ -357,7 +355,6 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
          ENG_LOG_ERROR("Unable to render (initialization failed)");
          return false;
       }
-
 
    // Apply program:
    Eng::Program &program = getProgram();

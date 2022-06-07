@@ -146,8 +146,8 @@ int main(int argc, char *argv[])
    std::cout << "Scene graph:\n" << root.get().getTreeAsString() << std::endl;
    
    // Get light ref:
-   std::reference_wrapper<Eng::Light> light = dynamic_cast<Eng::Light &>(Eng::Container::getInstance().find("Omni001"));      
-   // light.get().setProjMatrix(glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, 1.0f, 1000.0f)); // Orthographic projection
+   std::reference_wrapper<Eng::Light> light = dynamic_cast<Eng::Light &>(Eng::Container::getInstance().find("Omni001"));
+   //light.get().setProjMatrix(glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, 1.0f, 1000.0f)); // Orthographic projection
    light.get().setProjMatrix(glm::perspective(glm::radians(75.0f), 1.0f, 1.0f, 1000.0f)); // Perspective projection         
    
    // Get torus knot ref:
@@ -180,6 +180,7 @@ int main(int argc, char *argv[])
       // Main rendering:
       eng.clear();      
       dfltPipe.render(camera, list);
+
       
       /// Uncomment the following line for displaying the shadow map:
       //full2dPipe.render(dfltPipe.getShadowMappingPipeline().getShadowMap(), list);
