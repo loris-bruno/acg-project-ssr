@@ -36,6 +36,7 @@
    Eng::PipelineRayTracing raytracingPipe;
 
 
+   glm::mat4 lightMat;
 
 ///////////////
 // CALLBACKS //
@@ -106,7 +107,16 @@ void keyboardCallback(int key, int scancode, int action, int mods)
    // ENG_LOG_DEBUG("key: %d, scancode: %d, action: %d, mods: %d", key, scancode, action, mods);
    switch (key)
    {
-      case 'W': if (action == 0) dfltPipe.setWireframe(!dfltPipe.isWireframe()); break;         
+   case 'W': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(0, 0, 5)); break;
+   case 'S': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(0, 0, -5)); break;
+   case 'A': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(5, 0, 0)); break;
+   case 'D': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(-5, 0, 0)); break;
+   case 'Q': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(0, 0, 5)); break;
+   case 'E': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(0, 0, -5)); break;
+   case 'I': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, 0.f, 1.f)); break;
+   case 'K': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, -0.f, 1.f)); break;
+   case 'J': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, 1.f, 0.f)); break;
+   case 'L': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, -1.f, 0.f)); break;
    }
 }
 
@@ -149,7 +159,8 @@ int main(int argc, char *argv[])
    std::reference_wrapper<Eng::Light> light = dynamic_cast<Eng::Light &>(Eng::Container::getInstance().find("Omni001"));
    //light.get().setProjMatrix(glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, 1.0f, 1000.0f)); // Orthographic projection
    light.get().setProjMatrix(glm::perspective(glm::radians(75.0f), 1.0f, 1.0f, 1000.0f)); // Perspective projection         
-   
+   lightMat = light.get().getMatrix();
+
    // Get torus knot ref:
    std::reference_wrapper<Eng::Mesh> tknot = dynamic_cast<Eng::Mesh &>(Eng::Container::getInstance().find("Torus Knot001"));   
 
@@ -173,6 +184,9 @@ int main(int argc, char *argv[])
       // Animate torus knot:      
       tknot.get().setMatrix(glm::rotate(tknot.get().getMatrix(), glm::radians(0.01f), glm::vec3(0.0f, 1.0f, 0.0f)));
       
+      // Move/rotate light:
+      light.get().setMatrix(lightMat);
+
       // Update list:
       list.reset();
       list.process(root);
