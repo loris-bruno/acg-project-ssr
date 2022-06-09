@@ -48,7 +48,6 @@ out vec4 fragPosition;
 out mat3 tangentSpace;
 out vec2 uv;
 
-
 void main()
 {
    vec3 T = normalize(vec3(normalMat * a_tangent.xyz));
@@ -75,20 +74,40 @@ static const std::string pipeline_fs = R"(
 #version 460 core
 #extension GL_ARB_bindless_texture : require
 
+#define METALNESS_THRESHOLD 0.5f
+#define ROUGHNESS_THRESHOLD 0.5f
+
 // Uniform (textures):
 layout (bindless_sampler) uniform sampler2D texture0; // Albedo
 layout (bindless_sampler) uniform sampler2D texture1; // Normal
 layout (bindless_sampler) uniform sampler2D texture2; // Roughness
 layout (bindless_sampler) uniform sampler2D texture3; // Metalness
 
+uniform vec3 camPos;
+
 // Varying:
 in vec4 fragPosition;
 in mat3 tangentSpace;
 in vec2 uv;
+in vec4 gl_FragCoord;
 
 layout(location=0) out vec4 positionOut;
 layout(location=1) out vec4 normalOut;
 layout(location=2) out vec4 albedoOut;
+
+struct RayStruct {
+   vec4 worldPos;
+   vec4 fragPos;
+   vec4 rayDir;
+   vec4 color;
+};
+
+layout(shared, binding=0) buffer RayData
+{
+   RayStruct rays[];
+};
+
+layout (binding = 0, offset = 0) uniform atomic_uint counter;
 
 
 /**
@@ -116,6 +135,16 @@ void main()
    positionOut = fragPosition;
    normalOut   = vec4(normal_texel.xyz, metalness_texel.x);
    albedoOut   = vec4(albedo_texel.xyz, roughness_texel.x);
+
+   if(metalness_texel.x < METALNESS_THRESHOLD && roughness_texel.x > ROUGHNESS_THRESHOLD)
+      return;
+      
+   uint index = atomicCounterIncrement(counter);
+
+   rays[index].worldPos = fragPosition;
+   rays[index].fragPos = gl_FragCoord;
+   rays[index].rayDir = vec4(reflect(fragPosition.xyz - camPos.xyz, normal_texel.xyz), 1.0f);
+   rays[index].color = vec4(albedo_texel.xyz, 1.0f);
 })";
 
 
@@ -138,10 +167,15 @@ struct Eng::PipelineGeometry::Reserved
    Eng::Texture depthTex;     // albedo rgb, alpha roughness
    Eng::Fbo fbo;
 
+   // Raytracing-related storage
+   Eng::Ssbo ssbo;
+   Eng::AtomicCounter ssboSizeCounter;
+   uint32_t ssboSize;
+
    /**
     * Constructor. 
     */
-   Reserved()
+   Reserved() : ssboSize { 0 }
    {}
 };
 
@@ -239,6 +273,27 @@ const Eng::Texture ENG_API& Eng::PipelineGeometry::getDepthBuffer() const
    return reserved->depthTex;
 }
 
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Gets ray ssbo.
+ * @return ray ssbo reference
+ */
+const Eng::Ssbo ENG_API& Eng::PipelineGeometry::getRaySsbo() const
+{
+   return reserved->ssbo;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Gets ray ssbo size.
+ * @return ray ssbo size
+ */
+const uint32_t ENG_API Eng::PipelineGeometry::getRaySsboSize() const
+{
+   return reserved->ssboSize;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
  * Initializes this pipeline. 
@@ -308,6 +363,11 @@ bool ENG_API Eng::PipelineGeometry::init()
       return false;
    }
 
+   // Allocate ray origin SSBO and counter:
+   reserved->ssbo.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y);
+   reserved->ssboSizeCounter.create(sizeof(GLuint));
+   reserved->ssboSizeCounter.reset();
+
    // Done: 
    this->setDirty(false);
    return true;
@@ -367,21 +427,39 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
    program.setMat4("projectionMat", Eng::Camera::getCached().getProjMatrix());
    // program.setMat4("modelviewMat", viewMatrix);
    
+   glm::mat4 camMat = Eng::Camera::getCached().getMatrix();
+   float x = camMat[3][0];
+   float y = camMat[3][1];
+   float z = camMat[3][2];
+   glm::vec3 camPos = glm::vec3(x, y, z);
+   program.setVec3("camPos", camPos);
+
+   // Bind SSBO and counter
+   reserved->ssbo.render(0);
+   reserved->ssboSizeCounter.render(0);
+
+
    // Bind FBO and change OpenGL settings:
    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
    reserved->fbo.render();
    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-   
+
 
    // Render meshes:   
    list.render(viewMatrix, Eng::List::Pass::meshes);         
+
+   reserved->ssboSizeCounter.read(&reserved->ssboSize);
+   reserved->ssboSizeCounter.reset();
+
+   
+   ENG_LOG_DEBUG(std::to_string(reserved->ssboSize).c_str());
 
    // Redo OpenGL settings:
    glCullFace(GL_BACK);
    
    Eng::Base &eng = Eng::Base::getInstance();
    Eng::Fbo::reset(eng.getWindowSize().x, eng.getWindowSize().y);   
-  
+ 
    // Done:   
    return true;
 }

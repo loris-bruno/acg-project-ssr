@@ -132,22 +132,17 @@ layout(std430, binding=3) buffer MaterialData
 // RAY DATA //
 //////////////
 
-struct RayStruct
-{
-   vec3 worldPos;
-   vec2 screenPos;
-   vec3 rayDir;
-   vec3 color;
-   
-   float distance;
-}
+struct RayStruct {
+   vec4 worldPos;
+   vec4 fragPos;
+   vec4 rayDir;
+   vec4 color;
+};
 
 layout(shared, binding=0) buffer RayData
 {
    RayStruct rays[];
 }
-
-
 
 ///////////////////
 // LOCAL STRUCTS //

@@ -56,23 +56,21 @@ public: //
     * Material data. This struct must be aligned for OpenGL std430.
     */
    __declspec(align(16)) struct MaterialStruct {
-      glm::vec4 albedo;    // 16b
-      glm::vec4 emission;  // + 16b -> 32b
-      float metalness;     // + 4b  -> 36b
-      float roughness;     // + 4b  -> 40b
+      glm::vec4 albedo;
+      glm::vec4 emission;
+      float metalness;
+      float roughness;
 
-      uint64_t albedoTexHandle;     // + 8b -> 48b
-      uint64_t metalnessTexHandle;  // + 8b -> 56b
-      uint64_t normalTexHandle;     // + 8b -> 64b
+      uint64_t albedoTexHandle;
+      uint64_t metalnessTexHandle;
+      uint64_t normalTexHandle;
    };
 
    struct RayStruct {
-      glm::vec3 worldPos;
-      glm::vec2 screenPos;
-      glm::vec3 rayDir;
-      glm::vec3 color;
-
-      float distance;
+      glm::vec4 worldPos;
+      glm::vec4 fragPos;
+      glm::vec4 rayDir;
+      glm::vec4 color;
    };
    
 

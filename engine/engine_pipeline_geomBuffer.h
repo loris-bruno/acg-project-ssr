@@ -33,6 +33,9 @@ public: //
    const Eng::Texture& getMaterialBuffer() const;
    const Eng::Texture& getDepthBuffer() const;
 
+   const Eng::Ssbo& getRaySsbo() const;
+   const uint32_t getRaySsboSize() const;
+
    // Rendering methods:
    // bool render(uint32_t value = 0, void *data = nullptr) const = delete;
    bool render(glm::mat4& viewMatrix, const Eng::List &list);
