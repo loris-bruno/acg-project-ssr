@@ -191,7 +191,7 @@ void main()
       
       float shadow = shadowAmount(lightData[i].matrix * pixWorldPos, i);
 
-      color += (lighting * (1.f - shadow)) / nrOfLights;
+      color += (lighting * (1.f - shadow));
    }
 
    outFragment = vec4(color.rgb, 1.0);
