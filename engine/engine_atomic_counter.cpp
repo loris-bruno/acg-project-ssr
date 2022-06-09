@@ -241,10 +241,10 @@ bool ENG_API Eng::AtomicCounter::unmap()
 bool ENG_API Eng::AtomicCounter::reset()
 {
 
-   GLuint* data;
+   GLuint* tmp;
    glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, reserved->oglId);
-   data = (GLuint*) glMapBufferRange(GL_ATOMIC_COUNTER_BUFFER, 0, reserved->size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
-   memset(data, 0, reserved->size);
+   tmp = (GLuint*) glMapBufferRange(GL_ATOMIC_COUNTER_BUFFER, 0, reserved->size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
+   memset(tmp, 0, reserved->size);
    glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
    // Done:
    return true;
@@ -258,9 +258,11 @@ bool ENG_API Eng::AtomicCounter::reset()
  */
 bool ENG_API Eng::AtomicCounter::read(void* data)
 {
+   GLuint* tmp;
    glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, reserved->oglId);
-   glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, reserved->size, data);
-   glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+   tmp = (GLuint*)glMapBufferRange(GL_ATOMIC_COUNTER_BUFFER, 0, reserved->size, GL_MAP_READ_BIT);
+   memcpy(data, tmp, reserved->size);
+   glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
    // Done:
    return true;
 }
