@@ -214,7 +214,7 @@ void ENG_API* Eng::AtomicCounter::map(Eng::AtomicCounter::Mapping mapping)
    case Mapping::read: bufMask = GL_MAP_READ_BIT; break;
    case Mapping::write: bufMask = GL_MAP_WRITE_BIT; break;
    }
-   bufMask |= GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT;
+   bufMask |= GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_UNSYNCHRONIZED_BIT;
    return glMapBufferRange(GL_ATOMIC_COUNTER_BUFFER, 0, reserved->size, bufMask);
 }
 
