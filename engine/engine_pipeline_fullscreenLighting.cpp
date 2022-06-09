@@ -371,7 +371,7 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
    for (int i = 0; i < shadowmap.getShadowMapCount(); i++) {
       handles[i] = shadowmap.getShadowMaps()[i].getOglBindlessHandle();
    }
-   program.setHandleArray("shadowMaps", handles, shadowmap.getShadowMapCount());
+   program.setUInt64Array("shadowMaps", handles, shadowmap.getShadowMapCount());
    
 
    glm::mat4 camMat = Eng::Camera::getCached().getMatrix();
