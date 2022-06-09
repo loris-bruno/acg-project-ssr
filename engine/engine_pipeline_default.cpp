@@ -358,7 +358,7 @@ bool ENG_API Eng::PipelineDefault::render(const Eng::Camera &camera, const Eng::
    const Eng::List::RenderableElem& lightRe = list.getRenderableElem(0);
    const Eng::Light& light = dynamic_cast<const Eng::Light&>(lightRe.reference.get());
    // Render shadow map:
-   reserved->shadowMapping.render(lightRe, list);
+   reserved->shadowMapping.render(list);
 
    program.render();
 

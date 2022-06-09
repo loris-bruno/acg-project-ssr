@@ -28,14 +28,16 @@ public: //
    virtual ~PipelineShadowMapping(); 
 
    // Get/set:
-   const Eng::Texture &getShadowMap() const;
+   const uint32_t getShadowMapCount() const;
+   const Eng::Texture* getShadowMaps() const;
 
    // Rendering methods:
    // bool render(uint32_t value = 0, void *data = nullptr) const = delete;
-   bool render(const Eng::List::RenderableElem &lightRe, const Eng::List &list);
+   bool render(const Eng::List &list);
    
    // Managed:
    bool init() override;
+   bool init(int nrOfLights);
    bool free() override;
 
 
@@ -49,6 +51,8 @@ protected: //
 
    // Const/dest:
    PipelineShadowMapping(const std::string &name);
+
+   bool attachDepthTexture(int lightNumber);
 };
 
 

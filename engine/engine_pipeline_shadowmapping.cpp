@@ -72,17 +72,21 @@ void main()
  */
 struct Eng::PipelineShadowMapping::Reserved
 {  
+   #define MAX_LIGHTS 4
+
    Eng::Shader vs;
    Eng::Shader fs;
    Eng::Program program;
-   Eng::Texture depthMap;
+   Eng::Texture depthMaps[MAX_LIGHTS];
    Eng::Fbo fbo;
+
+   uint32_t shadowMapCount;
 
 
    /**
     * Constructor. 
     */
-   Reserved()
+   Reserved() : shadowMapCount{ 0 }
    {}
 };
 
@@ -136,29 +140,50 @@ ENG_API Eng::PipelineShadowMapping::~PipelineShadowMapping()
       free();
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Gets number of shadow maps stored.
+ * @return number of shadow maps stored
+ */
+const uint32_t ENG_API Eng::PipelineShadowMapping::getShadowMapCount() const
+{
+   return reserved->shadowMapCount;
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
- * Gets shadow map texture reference.
- * @return shadow map texture reference
+ * Gets shadow map texture array reference.
+ * @return shadow map texture array reference
  */
-const Eng::Texture ENG_API &Eng::PipelineShadowMapping::getShadowMap() const
+const Eng::Texture ENG_API *Eng::PipelineShadowMapping::getShadowMaps() const
 {	
-   return reserved->depthMap;
+   return reserved->depthMaps;
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Initializes this pipeline with 1 shadowmap.
+ * @return TF
+ */
+bool ENG_API Eng::PipelineShadowMapping::init()
+{
+   return this->init(1);
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
  * Initializes this pipeline. 
+ * @param nrOfLights number of lights to render shadowmaps for
  * @return TF
  */
-bool ENG_API Eng::PipelineShadowMapping::init()
+bool ENG_API Eng::PipelineShadowMapping::init(int nrOfLights)
 {
    // Already initialized?
    if (this->Eng::Managed::init() == false)
       return false;
    if (!this->isDirty())
+      return false;
+   if (nrOfLights <= 0)
       return false;
 
    // Build:
@@ -172,22 +197,32 @@ bool ENG_API Eng::PipelineShadowMapping::init()
    this->setProgram(reserved->program);
 
    // Depth map:
-   if (reserved->depthMap.create(depthTextureSize, depthTextureSize, Eng::Texture::Format::depth) == false)
-   {
-      ENG_LOG_ERROR("Unable to init depth map");
-      return false;
+   for (int i = 0; i < nrOfLights; i++) {
+      if (reserved->depthMaps[i].create(depthTextureSize, depthTextureSize, Eng::Texture::Format::depth) == false)
+      {
+         ENG_LOG_ERROR("Unable to init depth map");
+         return false;
+      }
+      reserved->shadowMapCount += 1;
    }
 
+
+   // Done: 
+   this->setDirty(false);
+   return true;
+}
+
+bool ENG_API Eng::PipelineShadowMapping::attachDepthTexture(int lightNumber) {
+
    // Depth FBO:
-   reserved->fbo.attachTexture(reserved->depthMap);
+   if (!reserved->fbo.attachTexture(reserved->depthMaps[lightNumber])) {
+      ENG_LOG_ERROR((std::string("Unable to attach depth texture for light #") + std::to_string(lightNumber)).c_str());
+   }
    if (reserved->fbo.validate() == false)
    {
       ENG_LOG_ERROR("Unable to init depth FBO");
       return false;
    }
-
-   // Done: 
-   this->setDirty(false);
    return true;
 }
 
@@ -214,22 +249,21 @@ bool ENG_API Eng::PipelineShadowMapping::free()
  * @param list list of renderables
  * @return TF
  */
-bool ENG_API Eng::PipelineShadowMapping::render(const Eng::List::RenderableElem &lightRe, const Eng::List &list)
+bool ENG_API Eng::PipelineShadowMapping::render(const Eng::List &list)
 {	
    // Safety net:
-   if (list == Eng::List::empty || !dynamic_cast<const Eng::Light *>(&lightRe.reference.get()))
+   if (list == Eng::List::empty)
    {
       ENG_LOG_ERROR("Invalid params");
       return false;
    }
-   const Eng::Light &light = dynamic_cast<const Eng::Light &>(lightRe.reference.get());
 
    // Just to update the cache
    this->Eng::Pipeline::render(list); 
 
    // Lazy-loading:
    if (this->isDirty())
-      if (!this->init())
+      if (!this->init(list.getNrOfLights()))
       {
          ENG_LOG_ERROR("Unable to render (initialization failed)");
          return false;
@@ -241,29 +275,47 @@ bool ENG_API Eng::PipelineShadowMapping::render(const Eng::List::RenderableElem 
    {
       ENG_LOG_ERROR("Invalid program");
       return false;
-   }   
-   program.render();    
-   program.setMat4("projectionMat", light.getProjMatrix());
-   
-   // Bind FBO and change OpenGL settings:
-   reserved->fbo.render();
-   glClear(GL_DEPTH_BUFFER_BIT);
-   glColorMask(0, 0, 0, 0);
-   // glClearDepth(0.5);
-   glEnable(GL_CULL_FACE);
-   glCullFace(GL_FRONT);
+   }
 
-   // Light source is the camera:
-   glm::mat4 viewMatrix = glm::inverse(lightRe.matrix);       
+   // Render one light at time:
+   for (int i = 0; i < list.getNrOfLights(); i++) {
+      
+      const Eng::List::RenderableElem& lightRe = list.getRenderableElem(i);
+      
+      if (dynamic_cast<const Eng::Light&>(lightRe.reference.get()) == Eng::Light::empty) {
+         ENG_LOG_ERROR("Invalid params");
+         return false;
+      }
 
-   // Render meshes:   
-   list.render(viewMatrix, Eng::List::Pass::meshes);         
+      const Eng::Light& light = dynamic_cast<const Eng::Light&>(lightRe.reference.get());
 
-   // Redo OpenGL settings:
-   glCullFace(GL_BACK);
-   glDisable(GL_CULL_FACE);
-   glColorMask(1, 1, 1, 1);
-   
+      program.render();
+      program.setMat4("projectionMat", light.getProjMatrix());
+
+      // Bind FBO and change OpenGL settings:
+      if (!this->attachDepthTexture(i)) {
+         ENG_LOG_ERROR("Cannot attach depth texture");
+         return false;
+      }
+      reserved->fbo.render();
+      glClear(GL_DEPTH_BUFFER_BIT);
+      glColorMask(0, 0, 0, 0);
+      //glClearDepth(0.5);
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_FRONT);
+
+      // Light source is the camera:
+      glm::mat4 viewMatrix = glm::inverse(lightRe.matrix);
+
+      // Render meshes:   
+      list.render(viewMatrix, Eng::List::Pass::meshes);
+
+      // Redo OpenGL settings:
+      glCullFace(GL_BACK);
+      glDisable(GL_CULL_FACE);
+      glColorMask(1, 1, 1, 1);
+   }
+      
    Eng::Base &eng = Eng::Base::getInstance();
    Eng::Fbo::reset(eng.getWindowSize().x, eng.getWindowSize().y);   
   

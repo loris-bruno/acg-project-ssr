@@ -64,13 +64,20 @@ out vec4 outFragment;
 layout (bindless_sampler) uniform sampler2D texture0;
 layout (bindless_sampler) uniform sampler2D texture1;
 layout (bindless_sampler) uniform sampler2D texture2;
-layout (bindless_sampler) uniform sampler2D texture3;
+//layout (bindless_sampler) uniform sampler2D texture3;
+uniform sampler2D shadowMaps[4];
 
 // Uniforms:
 uniform vec3 camPos;          // Camera position in World-Space
-uniform vec3 lightPos;        // Light position in World-Space
-uniform vec3 lightCol;        // Light color
-uniform mat4 lightMatrix;     // Transformation into light space
+
+struct LightData {
+   vec3 position;
+   vec3 color;
+   mat4 matrix;
+};
+
+uniform uint nrOfLights;
+uniform LightData lightData[4];
 
 const float PI = 3.14159265359;
 
@@ -80,7 +87,7 @@ const float PI = 3.14159265359;
  * @param fragPosLightSpace frament coords in light space
  * @return shadow intensity
  */
-float shadowAmount(vec4 fragPosLightSpace)
+float shadowAmount(vec4 fragPosLightSpace, int lightNum)
 {
    // From "clip" to "ndc" coords:
    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
@@ -89,7 +96,7 @@ float shadowAmount(vec4 fragPosLightSpace)
    projCoords = projCoords * 0.5f + 0.5f;
    
    // Get closest depth in the shadow map:
-   float closestDepth = texture(texture3, projCoords.xy).r;    
+   float closestDepth = texture(shadowMaps[lightNum], projCoords.xy).r;    
 
    // Check whether current fragment is in shadow:
    return projCoords.z > closestDepth  ? 1.0f : 0.0f;   
@@ -125,7 +132,7 @@ float DistributionGGX(vec3 normal, vec3 halfvector, float roughness)
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-} 
+}
 
 
 /**
@@ -141,7 +148,6 @@ float evaluateGeometry(vec3 N, vec3 V, float alpha)
    return dot(N, V) / (dot(N, V) * (1.0f - k_direct) + k_direct);
 }
 
-
 void main()
 {
    // Texture lookup:
@@ -149,45 +155,44 @@ void main()
    vec4 pixWorldNormal  = texture(texture1, uv);
    vec4 pixMaterial     = texture(texture2, uv);
 
-   vec3 color = pixMaterial.xyz * .3f;       // hardcoded ambient term
-
-
+   vec3 color = pixMaterial.xyz * .1f;       // hardcoded ambient term
    vec3 viewDir = normalize(camPos.xyz - pixWorldPos.xyz);
-   vec3 lightDir = normalize(lightPos.xyz - pixWorldPos.xyz);
 
-   
    if (dot(pixWorldNormal.xyz, viewDir.xyz) < 0.0f){
       outFragment = vec4(color, 1.f);
       return;
    }
 
-   vec3 halfVector = normalize(lightDir + viewDir);
    float cosTheta = max(dot(pixWorldNormal.xyz,viewDir), .0f);
    vec3 F0 = mix(vec3(.04f), pixMaterial.rgb, pixWorldNormal.w);
-   
-   //float distance = length(pixWorldPos.xyz - lightPos.xyz);
-   //float attenuation = 1.f / (distance * distance);
-   float attenuation = 1.f;
-   vec3 radiance = lightCol * attenuation;
 
-   float D = DistributionGGX(pixWorldNormal.xyz, halfVector, pixMaterial.w);
-   vec3 F = fresnelSchlick(cosTheta, F0);
-   float G = evaluateGeometry(pixWorldNormal.rgb, viewDir.rgb, pixMaterial.w);
-
-   vec3 num = D * G * F;
-   float denum = 4 * max(dot(pixWorldNormal.rgb, viewDir.rgb), 0.f) * max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f) + .0001f;
+   for(int i = 0; i < nrOfLights; i++) {
+      vec3 lightDir = normalize(lightData[i].position.xyz - pixWorldPos.xyz);
+      vec3 halfVector = normalize(lightDir + viewDir);
    
-   vec3 specular = num / denum;
+      //float distance = length(pixWorldPos.xyz - lightData[i].position.xyz);
+      //float attenuation = 1.f / (distance * distance);
+      float attenuation = 1.f;
+      vec3 radiance = lightData[i].color * attenuation;
+
+      float D = DistributionGGX(pixWorldNormal.xyz, halfVector, pixMaterial.w);
+      vec3 F = fresnelSchlick(cosTheta, F0);
+      float G = evaluateGeometry(pixWorldNormal.rgb, viewDir.rgb, pixMaterial.w);
+
+      vec3 num = D * G * F;
+      float denum = 4 * max(dot(pixWorldNormal.rgb, viewDir.rgb), 0.f) * max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f) + .0001f;
+   
+      vec3 specular = num / denum;
   
-   vec3 kD = (vec3(1.f) - F) * (1.f - pixWorldNormal.w);
+      vec3 kD = (vec3(1.f) - F) * (1.f - pixWorldNormal.w);
    
-   vec3 lighting = (kD * pixMaterial.xyz / PI + specular) * radiance *  max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f);
-   lighting = pow(lighting, vec3(1.f/2.2f));
+      vec3 lighting = (kD * pixMaterial.xyz / PI + specular) * radiance *  max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f);
+      lighting = pow(lighting, vec3(1.f/2.2f));
       
-   float shadow = shadowAmount(lightMatrix * pixWorldPos);
+      float shadow = shadowAmount(lightData[i].matrix * pixWorldPos, i);
 
-   color += lighting * (1.f - shadow);
-   //color += lighting;
+      color += (lighting * (1.f - shadow)) / nrOfLights;
+   }
 
    outFragment = vec4(color.rgb, 1.0);
 }
@@ -327,7 +332,7 @@ bool ENG_API Eng::PipelineFullscreenLighting::free()
  * @param list list of renderables
  * @return TF
  */
-bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry& geometries, const Eng::PipelineShadowMapping& shadowmap, Eng::Light& light, const Eng::List &list)
+bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry& geometries, const Eng::PipelineShadowMapping& shadowmap, const Eng::List &list)
 {	
    // Safety net:
    if (geometries.getPositionBuffer() == Eng::Texture::empty || geometries.getNormalBuffer() == Eng::Texture::empty || geometries.getMaterialBuffer() == Eng::Texture::empty || list == Eng::List::empty)
@@ -359,32 +364,51 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
    geometries.getPositionBuffer().render(0);
    geometries.getNormalBuffer().render(1);
    geometries.getMaterialBuffer().render(2);
-   shadowmap.getShadowMap().render(3);
+   //shadowmap.getShadowMaps()[0].render(3);
 
+   GLuint64 handles[4];
+
+   for (int i = 0; i < shadowmap.getShadowMapCount(); i++) {
+      handles[i] = shadowmap.getShadowMaps()[i].getOglBindlessHandle();
+   }
+   program.setHandleArray("shadowMaps", handles, shadowmap.getShadowMapCount());
    
+
    glm::mat4 camMat = Eng::Camera::getCached().getMatrix();
    float x = camMat[3][0];
    float y = camMat[3][1];
    float z = camMat[3][2];
    glm::vec3 camPos = glm::vec3(x, y, z);
 
-   glm::mat4 lightMatrix = light.getMatrix();
-   x = lightMatrix[3][0];
-   y = lightMatrix[3][1];
-   z = lightMatrix[3][2];
-   glm::vec3 lightPos = glm::vec3(x, y, z);
-
    program.setVec3("camPos", camPos);
-   program.setVec3("lightPos", lightPos);
-   // program.setVec3("lightCol", glm::vec3(0.3f, 0.5f, 0.9f));
-   program.setVec3("lightCol", glm::vec3(0.7f, 0.75f, 0.79f));
 
+   // copy light data
+   for (int i = 0; i < list.getNrOfLights(); i++) {
+      const Eng::List::RenderableElem& lightRe = list.getRenderableElem(i);
 
-   glm::mat4 lpm = light.getProjMatrix();
-   glm::mat4 lvm = glm::inverse( lightMatrix );
-   glm::mat4 lightFinalMatrix = lpm* lvm; // lvm; // To convert from eye coords into light space
-   program.setMat4("lightMatrix", lightFinalMatrix);
+      if (dynamic_cast<const Eng::Light&>(lightRe.reference.get()) == Eng::Light::empty) {
+         ENG_LOG_ERROR("Invalid params");
+         return false;
+      }
 
+      const Eng::Light& light = dynamic_cast<const Eng::Light&>(lightRe.reference.get());
+
+      glm::mat4 lightMatrix = light.getMatrix();
+      x = lightMatrix[3][0];
+      y = lightMatrix[3][1];
+      z = lightMatrix[3][2];
+      glm::vec3 lightPos = glm::vec3(x, y, z);
+
+      program.setVec3(std::string("lightData[") + std::to_string(i) + std::string("].position"), lightPos);
+      program.setVec3(std::string("lightData[") + std::to_string(i) + std::string("].color"), light.getColor());
+
+      glm::mat4 lpm = light.getProjMatrix();
+      glm::mat4 lvm = glm::inverse(lightMatrix);
+      glm::mat4 lightFinalMatrix = lpm * lvm; // lvm; // To convert from eye coords into light space
+      program.setMat4(std::string("lightData[") + std::to_string(i) + std::string("].matrix"), lightFinalMatrix);
+   }
+
+   program.setUInt("nrOfLights", list.getNrOfLights());
 
    Eng::Base &eng = Eng::Base::getInstance();
    Eng::Fbo::reset(eng.getWindowSize().x, eng.getWindowSize().y);   

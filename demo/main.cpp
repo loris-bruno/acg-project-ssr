@@ -31,12 +31,15 @@
 
    // Pipelines:
    Eng::PipelineDefault dfltPipe;
+   Eng::PipelineShadowMapping shadowPipe;
+   Eng::PipelineGeometry geometryPipe;
    Eng::PipelineFullscreen2D full2dPipe;
    Eng::PipelineFullscreenLighting lightingPipe;
    Eng::PipelineRayTracing raytracingPipe;
 
 
    glm::mat4 lightMat;
+   int shadowMap = 0;
 
 ///////////////
 // CALLBACKS //
@@ -117,6 +120,7 @@ void keyboardCallback(int key, int scancode, int action, int mods)
    case 'K': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, -0.f, 1.f)); break;
    case 'J': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, 1.f, 0.f)); break;
    case 'L': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, -1.f, 0.f)); break;
+   case 'Z': if (action == 0) shadowMap++; break;
    }
 }
 
@@ -152,14 +156,16 @@ int main(int argc, char *argv[])
    /////////////////
    // Loading scene:   
    Eng::Ovo ovo; 
-   std::reference_wrapper<Eng::Node> root = ovo.load("simple3dScene.ovo");
+   std::reference_wrapper<Eng::Node> root = ovo.load("simpler3dScene.ovo");
    std::cout << "Scene graph:\n" << root.get().getTreeAsString() << std::endl;
    
    // Get light ref:
    std::reference_wrapper<Eng::Light> light = dynamic_cast<Eng::Light &>(Eng::Container::getInstance().find("Omni001"));
    //light.get().setProjMatrix(glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, 1.0f, 1000.0f)); // Orthographic projection
-   light.get().setProjMatrix(glm::perspective(glm::radians(75.0f), 1.0f, 1.0f, 1000.0f)); // Perspective projection         
+   light.get().setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, 1.0f, 1000.f)); // Perspective projection         
    lightMat = light.get().getMatrix();
+
+   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002")).setProjMatrix(glm::perspective(glm::radians(120.0f), 1.0f, 1.0f, 1000.f));
 
    // Get torus knot ref:
    std::reference_wrapper<Eng::Mesh> tknot = dynamic_cast<Eng::Mesh &>(Eng::Container::getInstance().find("Torus Knot001"));   
@@ -169,8 +175,6 @@ int main(int argc, char *argv[])
    Eng::Camera camera;
    camera.setProjMatrix(glm::perspective(glm::radians(45.0f), eng.getWindowSize().x / (float) eng.getWindowSize().y, 1.0f, 1000.0f));
 
-
-  
    /////////////
    // Main loop:
    std::cout << "Entering main loop..." << std::endl;      
@@ -182,7 +186,7 @@ int main(int argc, char *argv[])
       camera.setMatrix(tmp);
 
       // Animate torus knot:      
-      tknot.get().setMatrix(glm::rotate(tknot.get().getMatrix(), glm::radians(0.01f), glm::vec3(0.0f, 1.0f, 0.0f)));
+      tknot.get().setMatrix(glm::rotate(tknot.get().getMatrix(), glm::radians(0.5f), glm::vec3(0.0f, 1.0f, 0.0f)));
       
       // Move/rotate light:
       light.get().setMatrix(lightMat);
@@ -191,13 +195,21 @@ int main(int argc, char *argv[])
       list.reset();
       list.process(root);
       
-      // Main rendering:
-      eng.clear();      
-      dfltPipe.render(camera, list);
+      // Clear last frame:
+      eng.clear();
 
+      // Render shadow maps:
+      shadowPipe.render(list);
+
+      // Render geometry buffer:
+      camera.render();
+      glm::mat4 viewMatrix = glm::inverse(camera.getWorldMatrix());
+      geometryPipe.render(viewMatrix, list);
+
+      //dfltPipe.render(camera, list);
       
       /// Uncomment the following line for displaying the shadow map:
-      //full2dPipe.render(dfltPipe.getShadowMappingPipeline().getShadowMap(), list);
+      //full2dPipe.render(shadowPipe.getShadowMaps()[0], list);
 
       /// Uncomment the following line to display content of the GBuffer (select the exact texture to be displayed here):
       /// options: getNormalBuffer(), getPositionBuffer(), getMaterialBuffer()
@@ -206,7 +218,7 @@ int main(int argc, char *argv[])
       //full2dPipe.render(dfltPipe.getGeometryPipeline().getMaterialBuffer(), list);
 
       /// Visualize the shaded scene by drawing a fullscreen quad
-      lightingPipe.render(dfltPipe.getGeometryPipeline(), dfltPipe.getShadowMappingPipeline(), light, list);
+      lightingPipe.render(geometryPipe, shadowPipe, list);
       eng.swap();    
    }
    std::cout << "Leaving main loop..." << std::endl;
