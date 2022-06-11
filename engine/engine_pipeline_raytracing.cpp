@@ -134,14 +134,14 @@ layout(std430, binding=3) buffer MaterialData
 
 struct RayStruct {
    vec4 worldPos;
-   vec4 fragPos;
    vec4 rayDir;
    vec4 color;
+   int next;
 };
 
-layout(shared, binding=0) buffer RayData
+layout(shared, binding=4) buffer RayData
 {
-   RayStruct rays[];
+   RayStruct rayData[];
 }
 
 ///////////////////
@@ -197,6 +197,7 @@ struct HitInfo
    // Output framebuffers:
    layout(binding = 0, rgba8) uniform image2D colorBuffer;             // Current frame and/or accumulation buffer   
 
+   layout(binding = 1, r32i) uniform image2D rayIndexBuffer;
 
 
 ///////////////
@@ -769,7 +770,7 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
  * @param list list of renderables
  * @return TF
  */
-bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const Eng::List &list)
+bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const Eng::List &list, Eng::Texture &rayDataIdTex, const Eng::Ssbo &rayData)
 {	
    // Safety net:
    if (camera == Eng::Camera::empty || list == Eng::List::empty)
@@ -830,6 +831,7 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
    reserved->lights.render(1);
    reserved->bspheres.render(2);
    reserved->materials.render(3);
+   rayDataIdTex.bindImage();
 
    // Uniforms:
    program.setUInt("nrOfTriangles", reserved->nrOfTriangles);

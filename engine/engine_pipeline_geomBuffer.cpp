@@ -48,6 +48,7 @@ out vec4 fragPosition;
 out mat3 tangentSpace;
 out vec2 uv;
 
+
 void main()
 {
    vec3 T = normalize(vec3(normalMat * a_tangent.xyz));
@@ -94,17 +95,18 @@ in vec4 gl_FragCoord;
 layout(location=0) out vec4 positionOut;
 layout(location=1) out vec4 normalOut;
 layout(location=2) out vec4 albedoOut;
+layout(location=3) out int rayDataId;
 
 struct RayStruct {
    vec4 worldPos;
-   vec4 fragPos;
    vec4 rayDir;
    vec4 color;
+   int next;
 };
 
 layout(shared, binding=0) buffer RayData
 {
-   RayStruct rays[];
+   RayStruct rayData[];
 };
 
 layout (binding = 0, offset = 0) uniform atomic_uint counter;
@@ -135,16 +137,17 @@ void main()
    positionOut = fragPosition;
    normalOut   = vec4(normal_texel.xyz, metalness_texel.x);
    albedoOut   = vec4(albedo_texel.xyz, roughness_texel.x);
+   rayDataId   = -1;
 
    if(metalness_texel.x < METALNESS_THRESHOLD && roughness_texel.x > ROUGHNESS_THRESHOLD)
       return;
       
    uint index = atomicCounterIncrement(counter);
-
-   rays[index].worldPos = fragPosition;
-   rays[index].fragPos = gl_FragCoord;
-   rays[index].rayDir = vec4(reflect(fragPosition.xyz - camPos.xyz, normal_texel.xyz), 1.0f);
-   rays[index].color = vec4(albedo_texel.xyz, 1.0f);
+   rayDataId = int(index);
+   rayData[index].worldPos = fragPosition;
+   rayData[index].rayDir = vec4(reflect(fragPosition.xyz - camPos.xyz, normal_texel.xyz), 1.0f);
+   rayData[index].color = vec4(albedo_texel.xyz, 1.0f);
+   rayData[index].next = -1;
 })";
 
 
@@ -164,7 +167,8 @@ struct Eng::PipelineGeometry::Reserved
    Eng::Texture posTex;       // xyz in world
    Eng::Texture normalTex;    // xyz in world, w metalness
    Eng::Texture matTex;       // albedo rgb, alpha roughness
-   Eng::Texture depthTex;     // albedo rgb, alpha roughness
+   Eng::Texture depthTex;     
+   Eng::Texture rayDataIdTex; // r32i tex, stores index of ray data in ssbo
    Eng::Fbo fbo;
 
    // Raytracing-related storage
@@ -352,11 +356,18 @@ bool ENG_API Eng::PipelineGeometry::init()
       return false;
    }
 
+   // Ray data id texture:
+   if (reserved->rayDataIdTex.create(width, height, Eng::Texture::Format::r32_int) == false) {
+       ENG_LOG_ERROR("Unable to init depth texture");
+       return false;
+   }
+
    // Depth FBO:
    reserved->fbo.attachTexture(reserved->posTex);
    reserved->fbo.attachTexture(reserved->normalTex);
    reserved->fbo.attachTexture(reserved->matTex);
    reserved->fbo.attachTexture(reserved->depthTex);
+   reserved->fbo.attachTexture(reserved->rayDataIdTex);
    if (reserved->fbo.validate() == false)
    {
       ENG_LOG_ERROR("Unable to init depth FBO");
@@ -364,7 +375,7 @@ bool ENG_API Eng::PipelineGeometry::init()
    }
 
    // Allocate ray origin SSBO and counter:
-   reserved->ssbo.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y);
+   reserved->ssbo.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y * 2);
    reserved->ssboSizeCounter.create(sizeof(GLuint));
    reserved->ssboSizeCounter.reset();
 

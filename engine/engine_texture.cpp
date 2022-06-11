@@ -522,9 +522,9 @@ bool ENG_API Eng::Texture::create(uint32_t sizeX, uint32_t sizeY, Format format)
 	}	   
    
    // Bind texture and copy content:   
-	GLuint intFormat;
-	GLuint extFormat;
-	GLuint extType;
+   GLuint intFormat;
+   GLuint extFormat;
+   GLuint extType;
    GLuint nrOfComponents;
 	switch (format)
 	{
@@ -560,13 +560,21 @@ bool ENG_API Eng::Texture::create(uint32_t sizeX, uint32_t sizeY, Format format)
          nrOfComponents = 3;
          break;
 
-      /////////////////////////
+         /////////////////////////
       case Format::rgba_float: //
-         intFormat = GL_RGBA16F;
-         extFormat = GL_RGBA;
-         extType = GL_FLOAT;
-         nrOfComponents = 4;
-         break;
+          intFormat = GL_RGBA16F;
+          extFormat = GL_RGBA;
+          extType = GL_FLOAT;
+          nrOfComponents = 4;
+          break;
+
+          /////////////////////////
+      case Format::r32_int: //
+          intFormat = GL_R32I;
+          extFormat = GL_RED_INTEGER;
+          extType = GL_INT;
+          nrOfComponents = 1;
+          break;
 
 		///////////
       default: //
