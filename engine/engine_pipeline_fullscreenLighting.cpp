@@ -64,8 +64,29 @@ out vec4 outFragment;
 layout (bindless_sampler) uniform sampler2D texture0;
 layout (bindless_sampler) uniform sampler2D texture1;
 layout (bindless_sampler) uniform sampler2D texture2;
-//layout (bindless_sampler) uniform sampler2D texture3;
+layout (bindless_sampler) uniform isampler2D texture3;
 uniform sampler2D shadowMaps[4];
+
+//////////////
+// RAY DATA //
+//////////////
+
+struct RayStruct {
+
+   vec3 position;
+   vec3 normal;
+   vec3 albedo;
+   float metalness;
+   float roughness;
+
+   vec3 rayDir;
+   int next;
+};
+
+layout(shared, binding=4) buffer RayData
+{
+   RayStruct rayData[];
+};
 
 // Uniforms:
 uniform vec3 camPos;          // Camera position in World-Space
@@ -163,38 +184,57 @@ void main()
       return;
    }
 
+   int rayId = texture(texture3, uv).r;
+
    float cosTheta = max(dot(pixWorldNormal.xyz,viewDir), .0f);
    vec3 F0 = mix(vec3(.04f), pixMaterial.rgb, pixWorldNormal.w);
+   vec3 F = fresnelSchlick(cosTheta, F0);
+   float G = evaluateGeometry(pixWorldNormal.rgb, viewDir.rgb, pixMaterial.w);
 
    for(int i = 0; i < nrOfLights; i++) {
       vec3 lightDir = normalize(lightData[i].position.xyz - pixWorldPos.xyz);
-      vec3 halfVector = normalize(lightDir + viewDir);
-   
-      //float distance = length(pixWorldPos.xyz - lightData[i].position.xyz);
-      //float attenuation = 1.f / (distance * distance);
-      float attenuation = 1.f;
+      float distance = length(pixWorldPos.xyz - lightData[i].position.xyz);
+      float attenuation = 1000.f / (distance * distance);
       vec3 radiance = lightData[i].color * attenuation;
 
-      float D = DistributionGGX(pixWorldNormal.xyz, halfVector, pixMaterial.w);
-      vec3 F = fresnelSchlick(cosTheta, F0);
-      float G = evaluateGeometry(pixWorldNormal.rgb, viewDir.rgb, pixMaterial.w);
-
-      vec3 num = D * G * F;
-      float denum = 4 * max(dot(pixWorldNormal.rgb, viewDir.rgb), 0.f) * max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f) + .0001f;
-   
-      vec3 specular = num / denum;
-  
       vec3 kD = (vec3(1.f) - F) * (1.f - pixWorldNormal.w);
+      vec3 lighting = kD * pixMaterial.xyz / PI;
+
+      vec3 specular = vec3(0.0f, 0.0f, 1.0f);
+
+      if(rayId == -1) {
+         vec3 halfVector = normalize(lightDir + viewDir);
+
+         float D = DistributionGGX(pixWorldNormal.xyz, halfVector, pixMaterial.w);
+         vec3 num = D * G * F;
+         float denum = 4 * max(dot(pixWorldNormal.rgb, viewDir.rgb), 0.f) * max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f) + .0001f;
    
-      vec3 lighting = (kD * pixMaterial.xyz / PI + specular) * radiance *  max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f);
+         specular = num / denum;
+      } else {
+         while(rayId != -1) {
+            rayId = rayData[rayId].next;
+            if(rayId == -1) break;
+            
+            vec3 halfVector = normalize(lightDir + viewDir);
+
+            float D = DistributionGGX(pixWorldNormal.xyz, halfVector, pixMaterial.w);
+            vec3 num = D * G * F;
+            float denum = 4 * max(dot(pixWorldNormal.rgb, viewDir.rgb), 0.f) * max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f) + .0001f;
+   
+            specular = num / denum;
+         }
+      }
+   
+      lighting += specular;
+      lighting *= radiance *  max(dot(pixWorldNormal.rgb, lightDir.xyz), 0.f);
       lighting = pow(lighting, vec3(1.f/2.2f));
       
       float shadow = shadowAmount(lightData[i].matrix * pixWorldPos, i);
 
       color += (lighting * (1.f - shadow));
    }
-
-   outFragment = vec4(color.rgb, 1.0);
+   
+   outFragment = vec4(color.rgb, 1.0f);
 }
 )";
 
@@ -332,7 +372,7 @@ bool ENG_API Eng::PipelineFullscreenLighting::free()
  * @param list list of renderables
  * @return TF
  */
-bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry& geometries, const Eng::PipelineShadowMapping& shadowmap, const Eng::List &list)
+bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry& geometries, const Eng::PipelineShadowMapping& shadowmap, const Eng::PipelineRayTracing& raytracing, const Eng::List &list)
 {	
    // Safety net:
    if (geometries.getPositionBuffer() == Eng::Texture::empty || geometries.getNormalBuffer() == Eng::Texture::empty || geometries.getMaterialBuffer() == Eng::Texture::empty || list == Eng::List::empty)
@@ -364,7 +404,8 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
    geometries.getPositionBuffer().render(0);
    geometries.getNormalBuffer().render(1);
    geometries.getMaterialBuffer().render(2);
-   //shadowmap.getShadowMaps()[0].render(3);
+   geometries.getRayBufferIndexTexture().render(3);
+   geometries.getRayBuffer().render(4);
 
    GLuint64 handles[4];
 
@@ -416,7 +457,7 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
    // Smart trick:   
    reserved->vao.render();
    glDrawArrays(GL_TRIANGLES, 0, 3);
-  
+
    // Done:   
    return true;
 }
