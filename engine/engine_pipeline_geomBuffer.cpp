@@ -75,8 +75,8 @@ static const std::string pipeline_fs = R"(
 #version 460 core
 #extension GL_ARB_bindless_texture : require
 
-#define METALNESS_THRESHOLD 0.5f
-#define ROUGHNESS_THRESHOLD 0.5f
+#define METALNESS_THRESHOLD 1.0f
+#define ROUGHNESS_THRESHOLD 0.0f
 
 // Uniform (textures):
 layout (bindless_sampler) uniform sampler2D texture0; // Albedo
@@ -98,10 +98,14 @@ layout(location=2) out vec4 albedoOut;
 layout(location=3) out int rayDataId;
 
 struct RayStruct {
-   vec4 worldPos;
-   vec4 rayDir;
-   vec4 color;
-   int next;
+    vec3 position;
+    vec3 normal;
+    vec3 albedo;
+    float metalness;
+    float roughness;
+
+    vec3 rayDir;
+    int next;
 };
 
 layout(shared, binding=0) buffer RayData
@@ -137,16 +141,20 @@ void main()
    positionOut = fragPosition;
    normalOut   = vec4(normal_texel.xyz, metalness_texel.x);
    albedoOut   = vec4(albedo_texel.xyz, roughness_texel.x);
-   rayDataId   = -1;
+   rayDataId = -1;   
 
    if(metalness_texel.x < METALNESS_THRESHOLD && roughness_texel.x > ROUGHNESS_THRESHOLD)
       return;
       
    uint index = atomicCounterIncrement(counter);
    rayDataId = int(index);
-   rayData[index].worldPos = fragPosition;
-   rayData[index].rayDir = vec4(reflect(fragPosition.xyz - camPos.xyz, normal_texel.xyz), 1.0f);
-   rayData[index].color = vec4(albedo_texel.xyz, 1.0f);
+   rayData[index].position = fragPosition.xyz;
+   rayData[index].normal = normalOut.xyz;
+   rayData[index].albedo = albedoOut.xyz;
+   rayData[index].metalness = normalOut.w;
+   rayData[index].roughness = albedoOut.w;
+
+   rayData[index].rayDir = reflect(fragPosition.xyz - camPos.xyz, normal_texel.xyz);
    rayData[index].next = -1;
 })";
 
@@ -168,18 +176,18 @@ struct Eng::PipelineGeometry::Reserved
    Eng::Texture normalTex;    // xyz in world, w metalness
    Eng::Texture matTex;       // albedo rgb, alpha roughness
    Eng::Texture depthTex;     
-   Eng::Texture rayDataIdTex; // r32i tex, stores index of ray data in ssbo
+   Eng::Texture rayBufferIndexTex; // r32i tex, stores index of ray data in ssbo
    Eng::Fbo fbo;
 
    // Raytracing-related storage
-   Eng::Ssbo rayData;
-   Eng::AtomicCounter rayDataCounter;
-   uint32_t rayDataSize;
+   Eng::Ssbo rayBuffer;
+   Eng::AtomicCounter rayBufferCounter;
+   uint32_t rayBufferSize;
 
    /**
     * Constructor. 
     */
-   Reserved() : rayDataSize { 0 }
+   Reserved() : rayBufferSize { 0 }
    {}
 };
 
@@ -283,9 +291,9 @@ const Eng::Texture ENG_API& Eng::PipelineGeometry::getDepthBuffer() const
  * Gets ray ssbo.
  * @return ray ssbo reference
  */
-const Eng::Ssbo ENG_API& Eng::PipelineGeometry::getRaySsbo() const
+const Eng::Ssbo ENG_API& Eng::PipelineGeometry::getRayBuffer() const
 {
-   return reserved->rayData;
+   return reserved->rayBuffer;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -293,9 +301,17 @@ const Eng::Ssbo ENG_API& Eng::PipelineGeometry::getRaySsbo() const
  * Gets ray ssbo size.
  * @return ray ssbo size
  */
-const uint32_t ENG_API Eng::PipelineGeometry::getRaySsboSize() const
+const uint32_t ENG_API Eng::PipelineGeometry::getRayBufferSize() const
 {
-   return reserved->rayDataSize;
+   return reserved->rayBufferSize;
+}
+
+const Eng::Texture ENG_API& Eng::PipelineGeometry::getRayBufferIndexTexture() const {
+   return reserved->rayBufferIndexTex;
+}
+
+const Eng::AtomicCounter ENG_API& Eng::PipelineGeometry::getRayBufferCounter() const {
+   return reserved->rayBufferCounter;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -357,7 +373,7 @@ bool ENG_API Eng::PipelineGeometry::init()
    }
 
    // Ray data id texture:
-   if (reserved->rayDataIdTex.create(width, height, Eng::Texture::Format::r32_int) == false) {
+   if (reserved->rayBufferIndexTex.create(width, height, Eng::Texture::Format::r32_int) == false) {
        ENG_LOG_ERROR("Unable to init depth texture");
        return false;
    }
@@ -367,7 +383,7 @@ bool ENG_API Eng::PipelineGeometry::init()
    reserved->fbo.attachTexture(reserved->normalTex);
    reserved->fbo.attachTexture(reserved->matTex);
    reserved->fbo.attachTexture(reserved->depthTex);
-   reserved->fbo.attachTexture(reserved->rayDataIdTex);
+   reserved->fbo.attachTexture(reserved->rayBufferIndexTex);
    if (reserved->fbo.validate() == false)
    {
       ENG_LOG_ERROR("Unable to init depth FBO");
@@ -375,9 +391,9 @@ bool ENG_API Eng::PipelineGeometry::init()
    }
 
    // Allocate ray origin SSBO and counter:
-   reserved->rayData.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y * 2);
-   reserved->rayDataCounter.create(sizeof(GLuint));
-   reserved->rayDataCounter.reset();
+   reserved->rayBuffer.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y * 2);
+   reserved->rayBufferCounter.create(sizeof(GLuint));
+   reserved->rayBufferCounter.reset();
 
    // Done: 
    this->setDirty(false);
@@ -446,8 +462,12 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
    program.setVec3("camPos", camPos);
 
    // Bind SSBO and counter
-   reserved->rayData.render(0);
-   reserved->rayDataCounter.render(0);
+   reserved->rayBuffer.render(0);
+   reserved->rayBufferCounter.render(0);
+   reserved->rayBufferCounter.reset();
+
+   int width = reserved->rayBufferIndexTex.getSizeX();
+   int height = reserved->rayBufferIndexTex.getSizeY();
 
 
    // Bind FBO and change OpenGL settings:
@@ -455,14 +475,19 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
    reserved->fbo.render();
    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
+   // Clear ray buffer index texture to -1
+   std::vector<GLint> emptyData(width * height, -1);
+   glBindTexture(GL_TEXTURE_2D, reserved->rayBufferIndexTex.getOglHandle());
+   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED_INTEGER, GL_INT, &emptyData[0]);
+
 
    // Render meshes:   
    list.render(viewMatrix, Eng::List::Pass::meshes);         
 
-   reserved->rayDataCounter.read(&reserved->rayDataSize);
+   reserved->rayBufferCounter.read(&reserved->rayBufferSize);
 
    
-   ENG_LOG_DEBUG(std::to_string(reserved->rayDataSize).c_str());
+   ENG_LOG_DEBUG(std::to_string(reserved->rayBufferSize).c_str());
 
    // Redo OpenGL settings:
    glCullFace(GL_BACK);

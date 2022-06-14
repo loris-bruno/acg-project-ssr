@@ -205,6 +205,7 @@ int main(int argc, char *argv[])
       camera.render();
       glm::mat4 viewMatrix = glm::inverse(camera.getWorldMatrix());
       geometryPipe.render(viewMatrix, list);
+      raytracingPipe.render(camera, list, geometryPipe);
 
       //dfltPipe.render(camera, list);
       

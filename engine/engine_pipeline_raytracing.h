@@ -26,17 +26,7 @@ public: //
       glm::vec4 n[3]; // 4 * 4 * 3 -> 48 bytes -> 96 bytes
       glm::vec2 u[3]; // 4 * 2 * 3 -> 24 bytes -> 120 bytes
       uint32_t matId; // 4 bytes -> 124 bytes
-      uint32_t _pad;  // 4 bytes -> 128 bytes
-   };
-
-
-   /**
-    * Per-light data. This struct must be aligned for OpenGL std430.
-    */
-   __declspec(align(16)) struct LightStruct
-   {
-      glm::vec4 position;   
-      glm::vec4 color;
+      uint32_t _pad; // 4 bytes -> 128
    };
 
 
@@ -52,7 +42,7 @@ public: //
       uint32_t _pad;
    };
 
-   /** 
+   /**
     * Material data. This struct must be aligned for OpenGL std430.
     */
    __declspec(align(16)) struct MaterialStruct {
@@ -63,13 +53,21 @@ public: //
 
       uint64_t albedoTexHandle;
       uint64_t metalnessTexHandle;
-      uint64_t normalTexHandle;
+      uint64_t roughnessTexHandle;
    };
 
+
+   /**
+    * Ray data. Utility to calculate size of SSBO.
+    */
    struct RayStruct {
-      glm::vec4 worldPos;
-      glm::vec4 rayDir;
-      glm::vec4 color;
+      glm::vec3 position;
+      glm::vec3 normal;
+      glm::vec3 albedo;
+      float metalness;
+      float roughness;
+
+      glm::vec3 rayDir;
       int32_t next;
    };
    
@@ -80,15 +78,12 @@ public: //
    PipelineRayTracing(PipelineRayTracing const&) = delete;   
    virtual ~PipelineRayTracing(); 
 
-   // Get/set:
-   const Eng::Texture &getColorBuffer() const;
-
    // Data preparation:
    bool migrate(const Eng::List &list);
 
    // Rendering methods:
    // bool render(uint32_t value = 0, void *data = nullptr) const = delete;
-   bool render(const Eng::Camera& camera, const Eng::List& list, Eng::Texture& rayDataIdTex, const Eng::AtomicCounter& rayDataCounter, const Eng::Ssbo& rayData);
+   bool render(const Eng::Camera& camera, const Eng::List& list, const Eng::PipelineGeometry& geometryPipe);
    
    // Managed:
    bool init() override;
