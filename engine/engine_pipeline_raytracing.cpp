@@ -33,7 +33,7 @@ static const std::string pipeline_cs = R"(
 #extension GL_ARB_gpu_shader_int64 : enable
 
 // This is the (hard-coded) workgroup size:
-layout (local_size_x = 8, local_size_y = 8) in;
+layout (local_size_x = 64) in;
 
 
 
@@ -144,6 +144,9 @@ layout(shared, binding=4) buffer RayData
    RayStruct rayData[];
 }
 
+layout (binding = 5, offset = 0) uniform atomic_uint counter;
+
+
 ///////////////////
 // LOCAL STRUCTS //
 ///////////////////
@@ -188,11 +191,6 @@ struct HitInfo
    uniform uint nrOfMaterials;
    uniform uint nrOfRays;
    uniform vec4 eyePosition;
-   uniform vec4 ray00;
-   uniform vec4 ray01;
-   uniform vec4 ray10;
-   uniform vec4 ray11;
-   uniform uint frameNr;
 
    // Output framebuffers:
    layout(binding = 0, rgba8) uniform image2D colorBuffer;             // Current frame and/or accumulation buffer   
@@ -770,7 +768,7 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
  * @param list list of renderables
  * @return TF
  */
-bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const Eng::List &list, Eng::Texture &rayDataIdTex, const Eng::Ssbo &rayData)
+bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const Eng::List &list, Eng::Texture &rayDataIdTex, const Eng::AtomicCounter &rayCounter, const Eng::Ssbo &rayData)
 {	
    // Safety net:
    if (camera == Eng::Camera::empty || list == Eng::List::empty)
@@ -831,22 +829,18 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
    reserved->lights.render(1);
    reserved->bspheres.render(2);
    reserved->materials.render(3);
-   rayDataIdTex.bindImage();
+   rayDataIdTex.bindImage(4);
+   rayCounter.render(5);
 
    // Uniforms:
    program.setUInt("nrOfTriangles", reserved->nrOfTriangles);
    program.setUInt("nrOfLights", reserved->nrOfLights);
    program.setUInt("nrOfBSpheres", reserved->nrOfBSpheres);
    program.setUInt("nrOfMaterials", reserved->nrOfMaterials);
-   program.setUInt("frameNr", Eng::Base::getInstance().getFrameNr() % 2);
    program.setVec4("eyePosition", eyePosition);
-   program.setVec4("ray00", ray00);
-   program.setVec4("ray01", ray01);
-   program.setVec4("ray10", ray10);
-   program.setVec4("ray11", ray11);
-   
+
    // Execute:
-   program.compute(reserved->colorBuffer.getSizeX() / 8, reserved->colorBuffer.getSizeY() / 8 / 2); // 8 is the hard-coded size of the workgroup
+   program.compute(rayData.getSize() / 64); // 8 is the hard-coded size of the workgroup
    program.wait();
      
    // Done:   

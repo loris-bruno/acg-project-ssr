@@ -88,7 +88,7 @@ public: //
 
    // Rendering methods:
    // bool render(uint32_t value = 0, void *data = nullptr) const = delete;
-   bool render(const Eng::Camera& camera, const Eng::List& list, Eng::Texture& rayDataIdTex, const Eng::Ssbo& rayData);
+   bool render(const Eng::Camera& camera, const Eng::List& list, Eng::Texture& rayDataIdTex, const Eng::AtomicCounter& rayDataCounter, const Eng::Ssbo& rayData);
    
    // Managed:
    bool init() override;

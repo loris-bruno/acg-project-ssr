@@ -172,14 +172,14 @@ struct Eng::PipelineGeometry::Reserved
    Eng::Fbo fbo;
 
    // Raytracing-related storage
-   Eng::Ssbo ssbo;
-   Eng::AtomicCounter ssboSizeCounter;
-   uint32_t ssboSize;
+   Eng::Ssbo rayData;
+   Eng::AtomicCounter rayDataCounter;
+   uint32_t rayDataSize;
 
    /**
     * Constructor. 
     */
-   Reserved() : ssboSize { 0 }
+   Reserved() : rayDataSize { 0 }
    {}
 };
 
@@ -285,7 +285,7 @@ const Eng::Texture ENG_API& Eng::PipelineGeometry::getDepthBuffer() const
  */
 const Eng::Ssbo ENG_API& Eng::PipelineGeometry::getRaySsbo() const
 {
-   return reserved->ssbo;
+   return reserved->rayData;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -295,7 +295,7 @@ const Eng::Ssbo ENG_API& Eng::PipelineGeometry::getRaySsbo() const
  */
 const uint32_t ENG_API Eng::PipelineGeometry::getRaySsboSize() const
 {
-   return reserved->ssboSize;
+   return reserved->rayDataSize;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -375,9 +375,9 @@ bool ENG_API Eng::PipelineGeometry::init()
    }
 
    // Allocate ray origin SSBO and counter:
-   reserved->ssbo.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y * 2);
-   reserved->ssboSizeCounter.create(sizeof(GLuint));
-   reserved->ssboSizeCounter.reset();
+   reserved->rayData.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y * 2);
+   reserved->rayDataCounter.create(sizeof(GLuint));
+   reserved->rayDataCounter.reset();
 
    // Done: 
    this->setDirty(false);
@@ -446,8 +446,8 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
    program.setVec3("camPos", camPos);
 
    // Bind SSBO and counter
-   reserved->ssbo.render(0);
-   reserved->ssboSizeCounter.render(0);
+   reserved->rayData.render(0);
+   reserved->rayDataCounter.render(0);
 
 
    // Bind FBO and change OpenGL settings:
@@ -459,11 +459,10 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
    // Render meshes:   
    list.render(viewMatrix, Eng::List::Pass::meshes);         
 
-   reserved->ssboSizeCounter.read(&reserved->ssboSize);
-   reserved->ssboSizeCounter.reset();
+   reserved->rayDataCounter.read(&reserved->rayDataSize);
 
    
-   ENG_LOG_DEBUG(std::to_string(reserved->ssboSize).c_str());
+   ENG_LOG_DEBUG(std::to_string(reserved->rayDataSize).c_str());
 
    // Redo OpenGL settings:
    glCullFace(GL_BACK);
