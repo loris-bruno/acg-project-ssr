@@ -75,8 +75,7 @@ static const std::string pipeline_fs = R"(
 #version 460 core
 #extension GL_ARB_bindless_texture : require
 
-#define METALNESS_THRESHOLD 1.0f
-#define ROUGHNESS_THRESHOLD 0.0f
+#define ROUGHNESS_THRESHOLD 0.25f
 
 // Uniform (textures):
 layout (bindless_sampler) uniform sampler2D texture0; // Albedo
@@ -143,8 +142,8 @@ void main()
    albedoOut   = vec4(albedo_texel.xyz, roughness_texel.x);
    rayDataId = -1;   
 
-   if(metalness_texel.x < METALNESS_THRESHOLD && roughness_texel.x > ROUGHNESS_THRESHOLD)
-      return;
+   if(roughness_texel.x > ROUGHNESS_THRESHOLD)
+         return;
       
    uint index = atomicCounterIncrement(counter);
    rayDataId = int(index);
