@@ -33,7 +33,7 @@ static const std::string pipeline_cs = R"(
 #extension GL_ARB_gpu_shader_int64 : enable
 
 // This is the (hard-coded) workgroup size:
-layout (local_size_x = 8, local_size_y = 8) in;
+layout (local_size_x = 64) in;
 
 
 
@@ -43,7 +43,7 @@ layout (local_size_x = 8, local_size_y = 8) in;
 
    #define K_EPSILON     1e-4f                // Tolerance around zero   
    #define FLT_MAX       3.402823466e+38f     // Max float value
-   #define NR_OF_BOUNCES 4                    // Number of bounces
+   #define NR_OF_BOUNCES 1                    // Number of bounces
    // #define CULLING                            // Back face culling enabled when defined
    // #define SHOW_BOUNCES_AS_COLORS             // When defined, each pixel has a different color according to the bounce nr.
 
@@ -59,31 +59,12 @@ struct TriangleStruct
    vec4 n[3];
    vec2 u[3];
    uint matId;
-   uint _pad;
 };
    
 layout(std430, binding=0) buffer SceneData
 {     
    TriangleStruct triangle[];     
-};   
-
-
-
-////////////
-// LIGHTS //
-////////////
-   
-struct LightStruct 
-{    
-   vec4 position;     
-   vec4 color;
 };
-   
-layout(std430, binding=1) buffer LightData
-{     
-   LightStruct light[];     
-};   
-
 
 
 //////////////////////
@@ -99,7 +80,7 @@ struct BSphereStruct
    uint _pad;
 };
 
-layout(std430, binding=2) buffer BSphereData
+layout(std430, binding=1) buffer BSphereData
 {     
    BSphereStruct bsphere[];     
 };
@@ -119,10 +100,10 @@ struct MaterialStruct
 
    uint64_t albedoTexHandle;
    uint64_t metalnessTexHandle;
-   uint64_t normalTexHandle;
+   uint64_t roughnessTexHandle;
 };
 
-layout(std430, binding=3) buffer MaterialData
+layout(std430, binding=2) buffer MaterialData
 {
    MaterialStruct materials[];
 };  
@@ -133,16 +114,24 @@ layout(std430, binding=3) buffer MaterialData
 //////////////
 
 struct RayStruct {
-   vec4 worldPos;
-   vec4 fragPos;
-   vec4 rayDir;
-   vec4 color;
+
+   vec3 position;
+   vec3 normal;
+   vec3 albedo;
+   float metalness;
+   float roughness;
+
+   vec3 rayDir;
+   int next;
 };
 
-layout(shared, binding=0) buffer RayData
+layout(shared, binding=3) buffer RayData
 {
-   RayStruct rays[];
-}
+   RayStruct rayData[];
+};
+
+layout (binding = 4, offset = 0) uniform atomic_uint counter;
+
 
 ///////////////////
 // LOCAL STRUCTS //
@@ -165,11 +154,9 @@ struct HitInfo
 {  
    unsigned int triangle;  // Triangle index (within the triangle[] array)
    float t, u, v;          // Triangle barycentric coords
-   vec3 color;             // Triangle color
-   vec3 ambient;           // Triangle ambient
-   vec3 diffuse;           // Triangle diffuse term
-   vec3 specular;          // Triangle specular term
-   float shininess;        // Triangle shininess
+   vec3 albedo;            // Triangle albedo
+   float metalness;        // Triangle metalness
+   float roughness;        // Triangle roughness
    vec3 collisionPoint;    // Triangle's coords at collision point
    vec3 normal;            // Triangle's normal at collision point
    vec3 faceNormal;        // Triangle's face normal
@@ -182,22 +169,8 @@ struct HitInfo
 ////////////
 
    // Uniforms:
-   uniform uint nrOfTriangles;
-   uniform uint nrOfLights;
    uniform uint nrOfBSpheres;
-   uniform uint nrOfMaterials;
    uniform uint nrOfRays;
-   uniform vec4 eyePosition;
-   uniform vec4 ray00;
-   uniform vec4 ray01;
-   uniform vec4 ray10;
-   uniform vec4 ray11;
-   uniform uint frameNr;
-
-   // Output framebuffers:
-   layout(binding = 0, rgba8) uniform image2D colorBuffer;             // Current frame and/or accumulation buffer   
-
-
 
 ///////////////
 // FUNCTIONS //
@@ -318,7 +291,9 @@ bool intersect(const Ray ray, out HitInfo info)
                   info.u = u;
                   info.v = v;
                   vec2 uv = triangle[i].u[1] * u + triangle[i].u[2] * v + (1.0f - u - v) * triangle[i].u[0];
-                  info.color = texture(sampler2D(materials[triangle[i].matId].albedoTexHandle), uv).rgb;
+                  info.albedo = texture(sampler2D(materials[triangle[i].matId].albedoTexHandle), uv).rgb;
+                  info.metalness = texture(sampler2D(materials[triangle[i].matId].metalnessTexHandle), uv).r;
+                  info.roughness = texture(sampler2D(materials[triangle[i].matId].roughnessTexHandle), uv).r;
          }
       }
 
@@ -346,7 +321,7 @@ bool intersect(const Ray ray, out HitInfo info)
  * param ray primary ray
  * return color of the pixel's ray
  */
-vec4 rayCasting(Ray ray, ivec2 pix)
+void rayCasting(Ray ray, uint index)
 {
    HitInfo hit;   
    vec4 outputColor = vec4(0.0f);
@@ -354,76 +329,29 @@ vec4 rayCasting(Ray ray, ivec2 pix)
 
    vec3 oldHitNormal = vec3(0.0f);
 
-   for (unsigned int c = 0; c < NR_OF_BOUNCES * 2; c++)
+   for (unsigned int c = 0; c < NR_OF_BOUNCES; c++)
       if (intersect(ray, hit))
       {
-         // Compute illumination:
-         vec4 illum = vec4(0.0f);
-         for (unsigned int l = 0; l < nrOfLights; l++)
-         {
-            vec3 L = normalize(light[l].position.xyz - hit.collisionPoint);
-            float lightDist = distance(light[l].position.xyz, hit.collisionPoint);
+         // get and increase counter
+         uint newIndex = atomicCounterIncrement(counter);
+         rayData[index].next = int(newIndex);
+         index = newIndex;
 
-            // Shadow ray:
-            Ray shadowRay;
-            HitInfo shadowHit;
+         rayData[index].position = hit.collisionPoint.xyz;
+         rayData[index].position = hit.normal.xyz;
+         rayData[index].albedo = hit.albedo.rgb;
+         rayData[index].metalness = hit.metalness;
+         rayData[index].roughness = hit.roughness;
+         rayData[index].rayDir = reflect(ray.dir, hit.normal.xyz);
+         rayData[index].next = -1;
 
-            shadowRay.origin = hit.collisionPoint.xyz + hit.faceNormal.xyz * (2.0f * K_EPSILON);
-            shadowRay.dir = L;
-         
-            float shadowDimmer = 1.0f;
-            if (intersect(shadowRay, shadowHit))                  
-               if (distance(hit.collisionPoint.xyz, shadowHit.collisionPoint.xyz) < lightDist)
-                  shadowDimmer = 0.0f;      
-            float attenuation = max(0.0f, 1.0f - lightDist / 300.0f); // 300.0f is the light influence radius
-            shadowDimmer = shadowDimmer * attenuation; 
-            
-            // Diffuse:
-            illum += shadowDimmer * throughput * light[l].color * vec4(clamp(dot(hit.normal.xyz, L), 0.0f, 1.0f));            
-
-            // Specular:                        
-            const vec3 V = normalize(ray.origin.xyz - hit.collisionPoint.xyz);
-            vec3 H = normalize(L + V);
-            illum += shadowDimmer * throughput * light[l].color * vec4(pow(clamp(dot(hit.normal.xyz, H), 0.0f, 1.0f), 1000.0f));            
-            
-            // Material absorption:
-            throughput *= 0.5f;
-
-            illum *= vec4(hit.color, 1.0f);
-         }
-         
-         outputColor = mix(outputColor, illum, 1.0f / float(c + 1));
-         //outputColor += illum;
          
          // Update next ray:
-         if(mod(c, 2) == 0) {
-            ray.origin = hit.collisionPoint.xyz + hit.faceNormal.xyz * (2.0f * K_EPSILON);
-            ray.dir = reflect(ray.dir, hit.normal.xyz);
-            oldHitNormal = hit.normal.xyz;
-        } else {
-            ray.dir = refract(ray.dir, oldHitNormal.xyz, 1.5f);
-        }
+        ray.origin = rayData[index].position.xyz + hit.faceNormal.xyz * (2.0f * K_EPSILON);
+        ray.dir = reflect(ray.dir, rayData[index].normal.xyz);
+        oldHitNormal = rayData[index].normal.xyz;
 
-#ifdef SHOW_BOUNCES_AS_COLORS         
-         // Store nr. of bounces:
-         switch (c)
-         {
-            case 0: outputColor = vec4(1.0f, 0.0f, 0.0f, 0.0f); break;
-            case 1: outputColor = vec4(0.0f, 1.0f, 0.0f, 0.0f); break;
-            case 2: outputColor = vec4(0.0f, 0.0f, 1.0f, 0.0f); break;
-            case 3: outputColor = vec4(1.0f, 1.0f, 0.0f, 0.0f); break;
-            case 4: outputColor = vec4(0.0f, 1.0f, 1.0f, 0.0f); break;               
-            case 5: outputColor = vec4(1.0f, 1.0f, 1.0f, 0.0f); break;               
-         }
-#endif
-         // outputColor = vec4(hit.normal, 1.0f) / 2.0f + 0.5f; // Uncomment to show normal vectors
-         // outputColor = vec4(hit.faceNormal, 1.0f) / 2.0f + 0.5f; // Uncomment to show face normal vectors
-      }   
-      else
-         return outputColor;
-   
-   // Done:
-   return outputColor;
+      }
 }
 
 
@@ -434,31 +362,21 @@ vec4 rayCasting(Ray ray, ivec2 pix)
 
 void main()
 {   
-   // Pixel coordinates:
-   ivec2 pix = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y * 2 + frameNr);
-   ivec2 size = imageSize(colorBuffer);
+
+   // Ray data index
+   uint index = gl_GlobalInvocationID.x;   
 
    // Avoid out of range values:
-   if (pix.x >= size.x || pix.y >= size.y)   
+   if (index >= nrOfRays)   
       return;  
 
    // Primary ray tracing:
    Ray ray;   
-   vec2 pos = (vec2(pix) / vec2(size.x, size.y)) - 0.5f;
-   const float sceneExt = 50.0f;
-   ray.origin = vec3(pos.x * sceneExt, pos.y * sceneExt, 100.0f);
-   ray.dir = vec3(0.0f, 0.0f, -1.0f);   
-
-   // Perspective:
-   pos = (vec2(pix) / vec2(size.x, size.y));
-   ray.origin = eyePosition.xyz;
-   ray.dir = normalize(mix(mix(ray00.xyz, ray01.xyz, pos.y), mix(ray10.xyz, ray11.xyz, pos.y), pos.x));   
+   ray.origin = rayData[index].position;
+   ray.dir = rayData[index].rayDir;    
 
    // Ray casting:
-   vec4 color = rayCasting(ray, pix);     
-
-   // Write output:   
-   imageStore(colorBuffer, pix, color);
+   rayCasting(ray, index);
 })";
 
 
@@ -475,23 +393,20 @@ struct Eng::PipelineRayTracing::Reserved
    Eng::Shader cs;   
    Eng::Program program;         
    Eng::Ssbo triangles;       ///< List of triangles in world coords
-   Eng::Ssbo lights;          ///< List of lights in world coords
    Eng::Ssbo bspheres;        ///< List of bounding spheres in world coords
    Eng::Ssbo materials;       ///< List of materials
    Eng::Ssbo rayData;         ///< List of ray data, populated 
-   Eng::Texture colorBuffer;  ///< Output image of the ray tracer
 
    // Scene-specific:
    uint32_t nrOfTriangles;
-   uint32_t nrOfLights;
-   uint32_t nrOfBSpheres;
+   uint32_t nrOfMeshes;
    uint32_t nrOfMaterials;
 
 
    /**
     * Constructor. 
     */
-   Reserved() : nrOfTriangles{ 0 }, nrOfLights{ 0 }, nrOfBSpheres{ 0 }, nrOfMaterials{ 0 }
+   Reserved() : nrOfTriangles{ 0 }, nrOfMeshes{ 0 }, nrOfMaterials{ 0 }
    {}
 };
 
@@ -568,11 +483,9 @@ bool ENG_API Eng::PipelineRayTracing::init()
    }
    this->setProgram(reserved->program);   
 
-   // Create output image:   
-   Eng::Base &eng = Eng::Base::getInstance();
-   reserved->colorBuffer.create(eng.getWindowSize().x, eng.getWindowSize().y, Eng::Texture::Format::r8g8b8a8);   
    
    // Create SSBO and counter for ray data:
+   Eng::Base& eng = Eng::Base::getInstance();
    int width = eng.getWindowSize().x;
    int height = eng.getWindowSize().y;
    reserved->rayData.create(sizeof(RayStruct) * width * height, nullptr);
@@ -598,18 +511,6 @@ bool ENG_API Eng::PipelineRayTracing::free()
    return true;
 }
 
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/**
- * Gets t color buffer used as ray tracing output.
- * @return color buffer texture reference
- */
-const Eng::Texture ENG_API &Eng::PipelineRayTracing::getColorBuffer() const
-{	
-   return reserved->colorBuffer;
-}
-
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
  * Migrates the data from a standard list into RT-specific structures. 
@@ -632,7 +533,7 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
    uint32_t nrOfFaces = 0;   
    uint32_t nrOfLights = list.getNrOfLights();   
    uint32_t nrOfRenderables = list.getNrOfRenderableElems();
-   uint32_t nrOfBSpheres = nrOfRenderables - nrOfLights;
+   uint32_t nrOfMeshes = nrOfRenderables - nrOfLights;
    uint32_t nrOfMaterials = nrOfRenderables;
    
    for (uint32_t c = nrOfLights; c < nrOfRenderables; c++)
@@ -651,9 +552,8 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
 
    /////////////////////////
    // 2nd pass: fill buffers
-   std::vector<Eng::PipelineRayTracing::LightStruct> allLights(nrOfLights);
    std::vector<Eng::PipelineRayTracing::TriangleStruct> allTriangles(nrOfFaces);
-   std::vector<Eng::PipelineRayTracing::BSphereStruct> allBSpheres(nrOfBSpheres);
+   std::vector<Eng::PipelineRayTracing::BSphereStruct> allBSpheres(nrOfMeshes);
    std::vector<Eng::PipelineRayTracing::MaterialStruct> allMaterials(nrOfMaterials);
    nrOfFaces = 0; // Reset counter
 
@@ -668,12 +568,7 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
       // Lights:
       if (c < nrOfLights)
       {
-         const Eng::Light &light = dynamic_cast<const Eng::Light &>(re.reference.get());
-         Eng::PipelineRayTracing::LightStruct l;
-
-         l.color = glm::vec4(light.getColor(), 1.0f);
-         l.position = modelMat[3];         
-         allLights[c] = l;         
+             
       }
       
       // Meshes (and bounding spheres):
@@ -715,7 +610,7 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
 
          m.albedoTexHandle = material.getTexture(Eng::Texture::Type::albedo).getOglBindlessHandle();
          m.metalnessTexHandle = material.getTexture(Eng::Texture::Type::metalness).getOglBindlessHandle();
-         m.normalTexHandle = material.getTexture(Eng::Texture::Type::normal).getOglBindlessHandle();
+         m.roughnessTexHandle = material.getTexture(Eng::Texture::Type::roughness).getOglBindlessHandle();
          allMaterials[c - nrOfLights] = m;
 
          // Copy faces and vertices into the std::vector:
@@ -748,15 +643,13 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
 
    ////////////////////////////
    // 3rd: copy data into SSBOs
-   reserved->lights.create(nrOfLights * sizeof(Eng::PipelineRayTracing::LightStruct), allLights.data());
    reserved->triangles.create(nrOfFaces * sizeof(Eng::PipelineRayTracing::TriangleStruct), allTriangles.data());
-   reserved->bspheres.create(nrOfBSpheres * sizeof(Eng::PipelineRayTracing::BSphereStruct), allBSpheres.data());
+   reserved->bspheres.create(nrOfMeshes * sizeof(Eng::PipelineRayTracing::BSphereStruct), allBSpheres.data());
    reserved->materials.create(nrOfMaterials * sizeof(Eng::PipelineRayTracing::MaterialStruct), allMaterials.data());
 
    // Done:
    reserved->nrOfTriangles = nrOfFaces;
-   reserved->nrOfLights = nrOfLights;
-   reserved->nrOfBSpheres = nrOfBSpheres;
+   reserved->nrOfMeshes = nrOfMeshes;
    reserved->nrOfMaterials = nrOfMaterials;
    return true;
 }
@@ -769,7 +662,7 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
  * @param list list of renderables
  * @return TF
  */
-bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const Eng::List &list)
+bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const Eng::List &list, const Eng::PipelineGeometry &geometryPipe)
 {	
    // Safety net:
    if (camera == Eng::Camera::empty || list == Eng::List::empty)
@@ -787,33 +680,7 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
       {
          ENG_LOG_ERROR("Unable to render (initialization failed)");
          return false;
-      }
-
-   // Get camera rays in the corners (will then be interpolated in the compute shader):
-   glm::mat4 cameraMat = camera.getWorldMatrix();
-   glm::mat4 viewMat = glm::inverse(cameraMat);
-   glm::mat4 invViewProjMat = glm::inverse(camera.getProjMatrix() * viewMat);
-   glm::vec4 eyePosition = cameraMat[3];      
-   
-   glm::vec4 ray00 = invViewProjMat * glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f);
-   ray00 /= ray00.w;   
-   ray00 -= eyePosition;
-   ray00 = glm::normalize(ray00);   
-
-   glm::vec4 ray01 = invViewProjMat * glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f);
-   ray01 /= ray01.w;
-   ray01 -= eyePosition;
-   ray01 = glm::normalize(ray01);
-
-   glm::vec4 ray10 = invViewProjMat * glm::vec4(1.0f, -1.0f, 0.0f, 1.0f);
-   ray10 /= ray10.w;
-   ray10 -= eyePosition;
-   ray10 = glm::normalize(ray10);
-
-   glm::vec4 ray11 = invViewProjMat * glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
-   ray11 /= ray11.w;
-   ray11 -= eyePosition;
-   ray11 = glm::normalize(ray11);   
+      } 
 
    // Apply program:
    Eng::Program &program = getProgram();
@@ -825,26 +692,18 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
    program.render();     
 
    // Bindings:
-   reserved->colorBuffer.bindImage();
    reserved->triangles.render(0);
-   reserved->lights.render(1);
-   reserved->bspheres.render(2);
-   reserved->materials.render(3);
+   reserved->bspheres.render(1);
+   reserved->materials.render(2);
+   geometryPipe.getRayBuffer().render(3);
+   geometryPipe.getRayBufferCounter().render(4);
 
    // Uniforms:
-   program.setUInt("nrOfTriangles", reserved->nrOfTriangles);
-   program.setUInt("nrOfLights", reserved->nrOfLights);
-   program.setUInt("nrOfBSpheres", reserved->nrOfBSpheres);
-   program.setUInt("nrOfMaterials", reserved->nrOfMaterials);
-   program.setUInt("frameNr", Eng::Base::getInstance().getFrameNr() % 2);
-   program.setVec4("eyePosition", eyePosition);
-   program.setVec4("ray00", ray00);
-   program.setVec4("ray01", ray01);
-   program.setVec4("ray10", ray10);
-   program.setVec4("ray11", ray11);
-   
+   program.setUInt("nrOfBSpheres", reserved->nrOfMeshes);
+   program.setUInt("nrOfRays", geometryPipe.getRayBufferSize());
+
    // Execute:
-   program.compute(reserved->colorBuffer.getSizeX() / 8, reserved->colorBuffer.getSizeY() / 8 / 2); // 8 is the hard-coded size of the workgroup
+   program.compute(geometryPipe.getRayBufferSize() / 64);
    program.wait();
      
    // Done:   

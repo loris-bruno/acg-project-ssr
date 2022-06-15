@@ -205,6 +205,7 @@ int main(int argc, char *argv[])
       camera.render();
       glm::mat4 viewMatrix = glm::inverse(camera.getWorldMatrix());
       geometryPipe.render(viewMatrix, list);
+      raytracingPipe.render(camera, list, geometryPipe);
 
       //dfltPipe.render(camera, list);
       
@@ -218,7 +219,7 @@ int main(int argc, char *argv[])
       //full2dPipe.render(dfltPipe.getGeometryPipeline().getMaterialBuffer(), list);
 
       /// Visualize the shaded scene by drawing a fullscreen quad
-      lightingPipe.render(geometryPipe, shadowPipe, list);
+      lightingPipe.render(geometryPipe, shadowPipe, raytracingPipe, list);
       eng.swap();    
    }
    std::cout << "Leaving main loop..." << std::endl;

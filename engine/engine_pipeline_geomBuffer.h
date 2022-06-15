@@ -32,9 +32,11 @@ public: //
    const Eng::Texture& getNormalBuffer()   const;
    const Eng::Texture& getMaterialBuffer() const;
    const Eng::Texture& getDepthBuffer() const;
-
-   const Eng::Ssbo& getRaySsbo() const;
-   const uint32_t getRaySsboSize() const;
+   
+   const Eng::Texture& getRayBufferIndexTexture() const;
+   const Eng::Ssbo& getRayBuffer() const;
+   const uint32_t getRayBufferSize() const;
+   const Eng::AtomicCounter& getRayBufferCounter() const;
 
    // Rendering methods:
    // bool render(uint32_t value = 0, void *data = nullptr) const = delete;
