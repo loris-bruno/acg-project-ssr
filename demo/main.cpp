@@ -136,7 +136,6 @@ int main(int argc, char *argv[])
    eng.setMouseButtonCallback(mouseButtonCallback);
    eng.setMouseScrollCallback(mouseScrollCallback);
    eng.setKeyboardCallback(keyboardCallback);
-     
 
    /////////////////
    // Loading scene:   
@@ -197,6 +196,14 @@ int main(int argc, char *argv[])
 
       start = Eng::Timer::getInstance().getCounter();
       raytracingPipe.migrate(list);
+      end = Eng::Timer::getInstance().getCounter();
+      time = Eng::Timer::getInstance().getCounterDiff(start, end);
+      out = "Raytracing migrate time: ";
+      out += std::to_string(time);
+      out += "ms";
+      ENG_LOG_DEBUG(out.c_str());
+      
+      start = Eng::Timer::getInstance().getCounter();
       raytracingPipe.render(camera, list, geometryPipe);
       end = Eng::Timer::getInstance().getCounter();
       time = Eng::Timer::getInstance().getCounterDiff(start, end);
