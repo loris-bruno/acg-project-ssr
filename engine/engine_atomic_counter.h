@@ -44,8 +44,8 @@ public: //
    bool create(uint64_t size);
    void* map(Mapping mapping);
    bool unmap();
-   bool reset();
-   bool read(void* data);
+   bool reset() const;
+   bool read(void* data) const;
 
    // Rendering methods:   
    bool render(uint32_t value = 0, void* data = nullptr) const;

@@ -238,7 +238,7 @@ bool ENG_API Eng::AtomicCounter::unmap()
  * Reset this AtomicCounter.
  * @return TF
  */
-bool ENG_API Eng::AtomicCounter::reset()
+bool ENG_API Eng::AtomicCounter::reset() const
 {
 
    GLuint* tmp;
@@ -256,7 +256,7 @@ bool ENG_API Eng::AtomicCounter::reset()
  * @param data pointer to host memory data will be read back into.
  * @return TF
  */
-bool ENG_API Eng::AtomicCounter::read(void* data)
+bool ENG_API Eng::AtomicCounter::read(void* data) const
 {
    GLuint* tmp;
    glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, reserved->oglId);

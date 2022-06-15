@@ -120,6 +120,7 @@
     <ClCompile Include="engine_shader.cpp" />
     <ClCompile Include="engine_ssbo.cpp" />
     <ClCompile Include="engine_texture.cpp" />
+    <ClCompile Include="engine_timer.cpp" />
     <ClCompile Include="engine_vao.cpp" />
     <ClCompile Include="engine_vbo.cpp" />
   </ItemGroup>
@@ -152,6 +153,7 @@
     <ClInclude Include="engine_shader.h" />
     <ClInclude Include="engine_ssbo.h" />
     <ClInclude Include="engine_texture.h" />
+    <ClInclude Include="engine_timer.h" />
     <ClInclude Include="engine_vao.h" />
     <ClInclude Include="engine_vbo.h" />
   </ItemGroup>
