@@ -141,16 +141,15 @@ int main(int argc, char *argv[])
    /////////////////
    // Loading scene:   
    Eng::Ovo ovo; 
-   std::reference_wrapper<Eng::Node> root = ovo.load("simpler3dScene.ovo");
+   std::reference_wrapper<Eng::Node> root = ovo.load("simple3dScene.ovo");
    std::cout << "Scene graph:\n" << root.get().getTreeAsString() << std::endl;
    
    // Get light ref:
-   std::reference_wrapper<Eng::Light> light = dynamic_cast<Eng::Light &>(Eng::Container::getInstance().find("Omni001"));
-   //light.get().setProjMatrix(glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, 1.0f, 1000.0f)); // Orthographic projection
-   light.get().setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, 1.0f, 1000.f)); // Perspective projection         
-   lightMat = light.get().getMatrix();
+   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, 1.0f, 1000.f)); // Perspective projection         
+   //dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, 1.0f, 1000.f));
+   //dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni003")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, 1.0f, 1000.f));
 
-   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002")).setProjMatrix(glm::perspective(glm::radians(120.0f), 1.0f, 1.0f, 1000.f));
+   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setColor(glm::vec3(2.0f, 2.0f, 2.0f)); // Perspective projection   
 
    // Get torus knot ref:
    std::reference_wrapper<Eng::Mesh> tknot = dynamic_cast<Eng::Mesh &>(Eng::Container::getInstance().find("Torus Knot001"));   
@@ -172,9 +171,6 @@ int main(int argc, char *argv[])
 
       // Animate torus knot:      
       tknot.get().setMatrix(glm::rotate(tknot.get().getMatrix(), glm::radians(0.5f), glm::vec3(0.0f, 1.0f, 0.0f)));
-      
-      // Move/rotate light:
-      light.get().setMatrix(lightMat);
 
       // Update list:
       list.reset();
