@@ -45,7 +45,6 @@ layout (local_size_x = 64) in;
    #define FLT_MAX       3.402823466e+38f     // Max float value
    #define NR_OF_BOUNCES 1                    // Number of bounces
    // #define CULLING                            // Back face culling enabled when defined
-   // #define SHOW_BOUNCES_AS_COLORS             // When defined, each pixel has a different color according to the bounce nr.
 
 
 
@@ -338,7 +337,7 @@ void rayCasting(Ray ray, uint index)
          index = newIndex;
 
          rayData[index].position = hit.collisionPoint.xyz;
-         rayData[index].position = hit.normal.xyz;
+         rayData[index].normal = hit.normal.xyz;
          rayData[index].albedo = hit.albedo.rgb;
          rayData[index].metalness = hit.metalness;
          rayData[index].roughness = hit.roughness;
@@ -546,8 +545,8 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
       nrOfFaces += ebo.getNrOfFaces();
    }
 
-   ENG_LOG_DEBUG("Tot. nr. of faces . . :  %u", nrOfFaces);
-   ENG_LOG_DEBUG("Tot. nr. of vertices  :  %u", nrOfVertices);   
+   // ENG_LOG_DEBUG("Tot. nr. of faces . . :  %u", nrOfFaces);
+   // ENG_LOG_DEBUG("Tot. nr. of vertices  :  %u", nrOfVertices);   
 
 
    /////////////////////////
@@ -590,7 +589,7 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
          glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo.getOglHandle());
          glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, ebo.getNrOfFaces() * sizeof(Eng::Ebo::FaceData), fData.data());
          
-         ENG_LOG_DEBUG("Object: %s, data: %s, face: %u, %u, %u", mesh.getName().c_str(), glm::to_string(vData[0].vertex).c_str(), fData[0].a, fData[0].b, fData[0].c);
+         // ENG_LOG_DEBUG("Object: %s, data: %s, face: %u, %u, %u", mesh.getName().c_str(), glm::to_string(vData[0].vertex).c_str(), fData[0].a, fData[0].b, fData[0].c);
 
          // Bounding sphere:
          Eng::PipelineRayTracing::BSphereStruct s;
@@ -703,9 +702,19 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
    program.setUInt("nrOfRays", geometryPipe.getRayBufferSize());
 
    // Execute:
-   program.compute(geometryPipe.getRayBufferSize() / 64);
    program.wait();
-     
+   program.compute(geometryPipe.getRayBufferSize() / 64, 1, 1);
+   program.wait();
+
+   glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+
+   uint32_t rayBufferSize;
+   geometryPipe.getRayBufferCounter().read(&rayBufferSize);
+   std::string out = "Ray buffer size after raytracing: ";
+   out += std::to_string(rayBufferSize);
+   ENG_LOG_DEBUG(out.c_str());
+
+
    // Done:   
    return true;
 }

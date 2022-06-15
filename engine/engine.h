@@ -67,6 +67,7 @@ namespace Eng {
 
    // Logging:
    #include "engine_log.h"
+   #include "engine_timer.h"
 
    // Architecture:
    #include "engine_object.h"

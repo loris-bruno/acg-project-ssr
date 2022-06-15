@@ -391,7 +391,7 @@ bool ENG_API Eng::PipelineGeometry::init()
    }
 
    // Allocate ray origin SSBO and counter:
-   reserved->rayBuffer.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y * 2);
+   reserved->rayBuffer.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y * 3);
    reserved->rayBufferCounter.create(sizeof(GLuint));
    reserved->rayBufferCounter.reset();
 
@@ -484,10 +484,13 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
    // Render meshes:   
    list.render(viewMatrix, Eng::List::Pass::meshes);         
 
+   glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+
    reserved->rayBufferCounter.read(&reserved->rayBufferSize);
 
-   
-   ENG_LOG_DEBUG(std::to_string(reserved->rayBufferSize).c_str());
+   std::string out("Ray buffer size after geometry: ");
+   out += std::to_string(reserved->rayBufferSize);
+   ENG_LOG_DEBUG(out.c_str());
 
    // Redo OpenGL settings:
    glCullFace(GL_BACK);

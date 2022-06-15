@@ -169,71 +169,113 @@ float evaluateGeometry(vec3 N, vec3 V, float alpha)
    return dot(N, V) / (dot(N, V) * (1.0f - k_direct) + k_direct);
 }
 
+vec3 computeFinalLighting(vec3 viewPos, vec4 pixPos, vec3 pixNorm, vec3 pixAlbedo, float pixMetal, float pixRough) {
+   vec3 color = pixAlbedo * .1f;       // hardcoded ambient term
+   vec3 viewDir = normalize(viewPos - pixPos.xyz);
+
+   if (dot(pixNorm, viewDir) < 0.0f){
+      return color;
+   }
+
+   for(int i = 0; i < nrOfLights; i++) {
+      vec3 lightDir = normalize(lightData[i].position.xyz - pixPos.xyz);
+      vec3 halfVector = normalize(lightDir + viewDir);
+
+      float cosTheta = max(dot(pixNorm, viewDir), .0f);
+      vec3 F0 = mix(vec3(.04f), pixAlbedo, pixMetal);
+      vec3  F = fresnelSchlick(cosTheta, F0);
+      float G = evaluateGeometry(pixNorm, viewDir, pixRough);
+      float D = DistributionGGX(pixNorm, halfVector, pixRough);
+
+      float distance = length(pixPos.xyz - lightData[i].position.xyz);
+      float attenuation = 1000.f / (distance * distance);
+      vec3 radiance = lightData[i].color * attenuation;
+
+      vec3 kD = (vec3(1.f) - F) * (1.f - pixMetal);
+      vec3 lighting = kD * pixAlbedo / PI;
+      vec3 specular = D * G * F;
+      float denum = 4 * max(dot(pixNorm, viewDir), 0.f) * max(dot(pixNorm, lightDir), 0.f) + .0001f;
+   
+      specular /= denum;
+   
+      lighting += specular;
+      lighting *= radiance *  max(dot(pixNorm, lightDir), 0.f);
+      lighting = pow(lighting, vec3(1.f/2.2f));
+      
+      float shadow = shadowAmount(lightData[i].matrix * pixPos, i);
+
+      color += lighting * (1.f - shadow);
+   }
+   
+   return color;
+}
+
+vec3 computeRaycastedLighting(RayStruct ray) {
+   vec3 color = vec3(.0f);
+   vec3 viewPos = camPos;
+   uint nrOfBounces = 0;
+   while(ray.next != -1) {
+      vec3 color = ray.albedo * .1f;       // hardcoded ambient term
+      vec3 viewDir = normalize(viewPos - ray.position);
+
+      for(int i = 0; i < nrOfLights; i++) {
+         vec3 lightDir = normalize(lightData[i].position.xyz - ray.position);
+         vec3 halfVector = normalize(lightDir + viewDir);
+
+         float cosTheta = max(dot(ray.normal, viewDir), .0f);
+         vec3 F0 = mix(vec3(.04f), ray.albedo, ray.metalness);
+         vec3  F = fresnelSchlick(cosTheta, F0);
+
+         float distance = length(ray.position - lightData[i].position.xyz);
+         float attenuation = 1000.f / (distance * distance);
+         vec3 radiance = lightData[i].color * attenuation;
+
+         vec3 kD = (vec3(1.f) - F) * (1.f - ray.metalness);
+         vec3 lighting = kD * ray.albedo / PI;
+         lighting *= radiance *  max(dot(ray.normal, lightDir), 0.f);
+         lighting = pow(lighting, vec3(1.f/2.2f));
+      
+         float shadow = shadowAmount(lightData[i].matrix * vec4(ray.position, 1.f), i);
+
+         nrOfBounces++;
+         color += (lighting * (1.f - shadow)) / nrOfBounces;
+      }
+      viewPos = ray.position;
+      ray = rayData[ray.next];
+   }
+   
+   color += computeFinalLighting(viewPos, vec4(ray.position, 1.0f), ray.normal, ray.albedo, ray.metalness, ray.roughness) / nrOfBounces;
+   
+   return color;
+}
+
 void main()
 {
    // Texture lookup:
    vec4 pixWorldPos     = texture(texture0, uv);
    vec4 pixWorldNormal  = texture(texture1, uv);
    vec4 pixMaterial     = texture(texture2, uv);
+   int rayId            = texture(texture3, uv).r;
 
-   vec3 color = pixMaterial.xyz * .1f;       // hardcoded ambient term
-   vec3 viewDir = normalize(camPos.xyz - pixWorldPos.xyz);
-
-   if (dot(pixWorldNormal.xyz, viewDir.xyz) < 0.0f){
-      outFragment = vec4(color, 1.f);
-      return;
-   }
-
-   int rayId = texture(texture3, uv).r;
-
-   float cosTheta = max(dot(pixWorldNormal.xyz,viewDir), .0f);
-   vec3 F0 = mix(vec3(.04f), pixMaterial.rgb, pixWorldNormal.w);
-   vec3 F = fresnelSchlick(cosTheta, F0);
-   float G = evaluateGeometry(pixWorldNormal.rgb, viewDir.rgb, pixMaterial.w);
-
-   for(int i = 0; i < nrOfLights; i++) {
-      vec3 lightDir = normalize(lightData[i].position.xyz - pixWorldPos.xyz);
-      float distance = length(pixWorldPos.xyz - lightData[i].position.xyz);
-      float attenuation = 1000.f / (distance * distance);
-      vec3 radiance = lightData[i].color * attenuation;
-
-      vec3 kD = (vec3(1.f) - F) * (1.f - pixWorldNormal.w);
-      vec3 lighting = kD * pixMaterial.xyz / PI;
-
-      vec3 specular = vec3(0.0f, 0.0f, 1.0f);
-
-      if(rayId == -1) {
-         vec3 halfVector = normalize(lightDir + viewDir);
-
-         float D = DistributionGGX(pixWorldNormal.xyz, halfVector, pixMaterial.w);
-         vec3 num = D * G * F;
-         float denum = 4 * max(dot(pixWorldNormal.rgb, viewDir.rgb), 0.f) * max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f) + .0001f;
+   vec3 color = vec3(0.0f);
    
-         specular = num / denum;
-      } else {
-         while(rayId != -1) {
-            rayId = rayData[rayId].next;
-            if(rayId == -1) break;
-            
-            vec3 halfVector = normalize(lightDir + viewDir);
-
-            float D = DistributionGGX(pixWorldNormal.xyz, halfVector, pixMaterial.w);
-            vec3 num = D * G * F;
-            float denum = 4 * max(dot(pixWorldNormal.rgb, viewDir.rgb), 0.f) * max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f) + .0001f;
-   
-            specular = num / denum;
-         }
-      }
-   
-      lighting += specular;
-      lighting *= radiance *  max(dot(pixWorldNormal.rgb, lightDir.xyz), 0.f);
-      lighting = pow(lighting, vec3(1.f/2.2f));
-      
-      float shadow = shadowAmount(lightData[i].matrix * pixWorldPos, i);
-
-      color += (lighting * (1.f - shadow));
-   }
-   
+   if(rayId == -1 || rayData[rayId].next == -1) {
+      color = computeFinalLighting(camPos, pixWorldPos, pixWorldNormal.xyz, pixMaterial.rgb, pixWorldNormal.w, pixMaterial.w);
+    } else {
+     color = computeRaycastedLighting(rayData[rayId]);
+    }
+   /*
+   if(rayId == -1)
+      color = vec3(1.f, 1.f, 1.f);
+   else if(rayData[rayId].next == -1)
+      color = vec3(1.f, 0.f, 0.f);
+   else if(rayData[rayData[rayId].next].next == -1)
+      color = vec3(0.f, 1.f, 0.f);
+   else if(rayData[rayData[rayData[rayId].next].next].next == -1)
+      color = vec3(0.f, 0.f, 1.f);
+   else
+      color = vec3(1.f, 1.f, 0.f);
+   */
    outFragment = vec4(color.rgb, 1.0f);
 }
 )";
