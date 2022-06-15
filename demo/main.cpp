@@ -37,10 +37,6 @@
    Eng::PipelineFullscreenLighting lightingPipe;
    Eng::PipelineRayTracing raytracingPipe;
 
-
-   glm::mat4 lightMat;
-   int shadowMap = 0;
-
 ///////////////
 // CALLBACKS //
 ///////////////
@@ -110,17 +106,6 @@ void keyboardCallback(int key, int scancode, int action, int mods)
    // ENG_LOG_DEBUG("key: %d, scancode: %d, action: %d, mods: %d", key, scancode, action, mods);
    switch (key)
    {
-   case 'W': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(0, 0, 5)); break;
-   case 'S': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(0, 0, -5)); break;
-   case 'A': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(5, 0, 0)); break;
-   case 'D': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(-5, 0, 0)); break;
-   case 'Q': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(0, 0, 5)); break;
-   case 'E': if (action == 0 || action == 2) lightMat = glm::translate(lightMat, glm::vec3(0, 0, -5)); break;
-   case 'I': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, 0.f, 1.f)); break;
-   case 'K': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, -0.f, 1.f)); break;
-   case 'J': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, 1.f, 0.f)); break;
-   case 'L': if (action == 0 || action == 2) lightMat = glm::rotate(lightMat, .5f, glm::vec3(0.f, -1.f, 0.f)); break;
-   case 'Z': if (action == 0) shadowMap++; break;
    }
 }
 
@@ -204,25 +189,50 @@ int main(int argc, char *argv[])
       // Render geometry buffer:
       camera.render();
       glm::mat4 viewMatrix = glm::inverse(camera.getWorldMatrix());
+
+      uint64_t start = Eng::Timer::getInstance().getCounter();
       geometryPipe.render(viewMatrix, list);
+      uint64_t end = Eng::Timer::getInstance().getCounter();
+      double time = Eng::Timer::getInstance().getCounterDiff(start, end);
+      std::string out = "Geometry pipeline time: ";
+      out += std::to_string(time);
+      out += "ms";
+      ENG_LOG_DEBUG(out.c_str());
+
+      start = Eng::Timer::getInstance().getCounter();
       raytracingPipe.migrate(list);
       raytracingPipe.render(camera, list, geometryPipe);
+      end = Eng::Timer::getInstance().getCounter();
+      time = Eng::Timer::getInstance().getCounterDiff(start, end);
+      out = "Raytracing pipeline time: ";
+      out += std::to_string(time);
+      out += "ms";
+      ENG_LOG_DEBUG(out.c_str());
 
-      //dfltPipe.render(camera, list);
-      
-      /// Uncomment the following line for displaying the shadow map:
-      //full2dPipe.render(shadowPipe.getShadowMaps()[0], list);
+      ////dfltPipe.render(camera, list);
+      //
+      ///// Uncomment the following line for displaying the shadow map:
+      ////full2dPipe.render(shadowPipe.getShadowMaps()[0], list);
 
-      /// Uncomment the following line to display content of the GBuffer (select the exact texture to be displayed here):
-      /// options: getNormalBuffer(), getPositionBuffer(), getMaterialBuffer()
-      //full2dPipe.render(dfltPipe.getGeometryPipeline().getPositionBuffer(), list);
-      //full2dPipe.render(dfltPipe.getGeometryPipeline().getNormalBuffer(), list);
-      //full2dPipe.render(dfltPipe.getGeometryPipeline().getMaterialBuffer(), list);
+      ///// Uncomment the following line to display content of the GBuffer (select the exact texture to be displayed here):
+      ///// options: getNormalBuffer(), getPositionBuffer(), getMaterialBuffer()
+      ////full2dPipe.render(dfltPipe.getGeometryPipeline().getPositionBuffer(), list);
+      ////full2dPipe.render(dfltPipe.getGeometryPipeline().getNormalBuffer(), list);
+      ////full2dPipe.render(dfltPipe.getGeometryPipeline().getMaterialBuffer(), list);
 
 
       /// Visualize the shaded scene by drawing a fullscreen quad
+      start = Eng::Timer::getInstance().getCounter();
       lightingPipe.render(geometryPipe, shadowPipe, raytracingPipe, list);
-      eng.swap();    
+      end = Eng::Timer::getInstance().getCounter();
+      time = Eng::Timer::getInstance().getCounterDiff(start, end);
+      out = "Shading pipeline time: ";
+      out += std::to_string(time);
+      out += "ms";
+      ENG_LOG_DEBUG(out.c_str());
+
+
+      eng.swap();
    }
    std::cout << "Leaving main loop..." << std::endl;
 
