@@ -33,7 +33,7 @@ static const std::string pipeline_cs = R"(
 #extension GL_ARB_gpu_shader_int64 : enable
 
 // This is the (hard-coded) workgroup size:
-layout (local_size_x = 64) in;
+layout (local_size_x = 1024) in;
 
 
 
@@ -704,7 +704,7 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
    program.setUInt("nrOfRays", nrOfRays);
 
    // Execute:
-   program.compute(geometryPipe.getRayBufferSize() / 64, 1, 1);
+   program.compute((nrOfRays / 1024.f) + 1);
    program.wait();
 
    uint32_t rayBufferSize;
