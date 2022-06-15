@@ -697,23 +697,21 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
    geometryPipe.getRayBuffer().render(3);
    geometryPipe.getRayBufferCounter().render(4);
 
+   uint32_t nrOfRays = geometryPipe.getRayBufferSize();
+
    // Uniforms:
    program.setUInt("nrOfBSpheres", reserved->nrOfMeshes);
-   program.setUInt("nrOfRays", geometryPipe.getRayBufferSize());
+   program.setUInt("nrOfRays", nrOfRays);
 
    // Execute:
-   program.wait();
    program.compute(geometryPipe.getRayBufferSize() / 64, 1, 1);
    program.wait();
 
-   glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
-
    uint32_t rayBufferSize;
    geometryPipe.getRayBufferCounter().read(&rayBufferSize);
-   std::string out = "Ray buffer size after raytracing: ";
-   out += std::to_string(rayBufferSize);
+   std::string out = "Ray-triangle intersections: ";
+   out += std::to_string(rayBufferSize-nrOfRays);
    ENG_LOG_DEBUG(out.c_str());
-
 
    // Done:   
    return true;
