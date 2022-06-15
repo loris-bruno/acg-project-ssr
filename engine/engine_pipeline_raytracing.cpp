@@ -337,7 +337,7 @@ void rayCasting(Ray ray, uint index)
          index = newIndex;
 
          rayData[index].position = hit.collisionPoint.xyz;
-         rayData[index].position = hit.normal.xyz;
+         rayData[index].normal = hit.normal.xyz;
          rayData[index].albedo = hit.albedo.rgb;
          rayData[index].metalness = hit.metalness;
          rayData[index].roughness = hit.roughness;
