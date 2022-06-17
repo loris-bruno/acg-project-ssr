@@ -92,7 +92,6 @@ void mouseScrollCallback(double scrollX, double scrollY)
    transZ -= (float) scrollY;
 }
 
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
  * Keyboard callback.
@@ -106,9 +105,9 @@ void keyboardCallback(int key, int scancode, int action, int mods)
    // ENG_LOG_DEBUG("key: %d, scancode: %d, action: %d, mods: %d", key, scancode, action, mods);
    switch (key)
    {
+
    }
 }
-
 
 
 //////////
@@ -140,15 +139,18 @@ int main(int argc, char *argv[])
    /////////////////
    // Loading scene:   
    Eng::Ovo ovo; 
-   std::reference_wrapper<Eng::Node> root = ovo.load("simple3dScene.ovo");
+   std::reference_wrapper<Eng::Node> root = ovo.load("simpler3dScene.ovo");
    std::cout << "Scene graph:\n" << root.get().getTreeAsString() << std::endl;
    
    // Get light ref:
-   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, 1.0f, 1000.f)); // Perspective projection         
-   //dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, 1.0f, 1000.f));
-   //dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni003")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, 1.0f, 1000.f));
+   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, .1f, 100.f)); // Perspective projection
+   //dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setColor(glm::vec3(0));
+   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002")).setProjMatrix(glm::perspective(glm::radians(150.f), 1.0f, .1f, 100.f));
+   
+   Eng::Light& light2 = dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002"));
+   light2.setCutoff(75.f);
+   light2.setSubtype(1);
 
-   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setColor(glm::vec3(2.0f, 2.0f, 2.0f)); // Perspective projection   
 
    // Get torus knot ref:
    std::reference_wrapper<Eng::Mesh> tknot = dynamic_cast<Eng::Mesh &>(Eng::Container::getInstance().find("Torus Knot001"));   

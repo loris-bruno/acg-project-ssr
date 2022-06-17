@@ -36,6 +36,17 @@ public: //
    const glm::vec3 &getAmbient() const;    
    void setProjMatrix(const glm::mat4 &projMatrix);
    const glm::mat4 &getProjMatrix() const;
+   void setRadius(float radius);
+   const float getRadius() const;
+   void setDirection(glm::vec3 direction);
+   const glm::vec3 getDirection() const;
+   void setCutoff(float cutoff);
+   const float getCutoff() const;
+   void setExponent(float exponent);
+   const float getExponent() const;
+   void setSubtype(uint8_t subtype);
+   const uint8_t getSubtype() const;
+
 
    // Rendering methods:   
    bool render(uint32_t value = 0, void *data = nullptr) const;   

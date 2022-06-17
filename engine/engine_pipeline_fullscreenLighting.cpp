@@ -95,6 +95,11 @@ struct LightData {
    vec3 position;
    vec3 color;
    mat4 matrix;
+   
+   int subtype;
+
+   vec3 direction;
+   float cutoff;
 };
 
 uniform uint nrOfLights;
@@ -179,6 +184,12 @@ vec3 computeFinalLighting(vec3 viewPos, vec4 pixPos, vec3 pixNorm, vec3 pixAlbed
 
    for(int i = 0; i < nrOfLights; i++) {
       vec3 lightDir = normalize(lightData[i].position.xyz - pixPos.xyz);
+         
+      if(lightData[i].subtype == 1) {
+         float theta = dot(lightDir, normalize(-lightData[i].direction));
+         if(theta < lightData[i].cutoff) continue;
+      }
+
       vec3 halfVector = normalize(lightDir + viewDir);
 
       float cosTheta = max(dot(pixNorm, viewDir), .0f);
@@ -220,6 +231,12 @@ vec3 computeRaycastedLighting(RayStruct ray) {
 
       for(int i = 0; i < nrOfLights; i++) {
          vec3 lightDir = normalize(lightData[i].position.xyz - ray.position);
+         
+         if(lightData[i].subtype == 1) {
+            float theta = dot(lightDir, normalize(-lightData[i].direction));
+            if(theta < lightData[i].cutoff) continue;
+         }
+
          vec3 halfVector = normalize(lightDir + viewDir);
 
          float cosTheta = max(dot(ray.normal, viewDir), .0f);
@@ -476,7 +493,7 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
 
       const Eng::Light& light = dynamic_cast<const Eng::Light&>(lightRe.reference.get());
 
-      glm::mat4 lightMatrix = light.getMatrix();
+      glm::mat4 lightMatrix = lightRe.matrix;
       x = lightMatrix[3][0];
       y = lightMatrix[3][1];
       z = lightMatrix[3][2];
@@ -484,11 +501,20 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
 
       program.setVec3(std::string("lightData[") + std::to_string(i) + std::string("].position"), lightPos);
       program.setVec3(std::string("lightData[") + std::to_string(i) + std::string("].color"), light.getColor());
+      program.setInt(std::string("lightData[") + std::to_string(i) + std::string("].subtype"), light.getSubtype());
+      program.setFloat(std::string("lightData[") + std::to_string(i) + std::string("].cutoff"), glm::cos(glm::radians(light.getCutoff())));
+
 
       glm::mat4 lpm = light.getProjMatrix();
       glm::mat4 lvm = glm::inverse(lightMatrix);
       glm::mat4 lightFinalMatrix = lpm * lvm; // lvm; // To convert from eye coords into light space
       program.setMat4(std::string("lightData[") + std::to_string(i) + std::string("].matrix"), lightFinalMatrix);
+
+      x = lvm[2][0];
+      y = lvm[2][1];
+      z = lvm[2][2];
+      glm::vec3 lightDir = glm::vec3(x, y, z);
+      program.setVec3(std::string("lightData[") + std::to_string(i) + std::string("].direction"), lightDir);
    }
 
    program.setUInt("nrOfLights", list.getNrOfLights());

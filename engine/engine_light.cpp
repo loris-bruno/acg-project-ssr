@@ -38,12 +38,24 @@ struct Eng::Light::Reserved
    glm::vec3 ambient;            ///< Ambient color
    glm::mat4 projMatrix;         ///< Projection matrix used for shadow mapping
 
+   uint8_t subtype;
+
+   // Point light
+   float radius;
+
+   // Spot light
+   glm::vec3 direction;          ///< Light direction
+   float cutoff;
+   float exponent;
+
 
    /**
     * Constructor. 
     */
    Reserved() : color{ 1.0f }, ambient { 0.25f },
-                projMatrix{ 1.0f }
+                projMatrix{ 1.0f }, subtype { 0 }, 
+                direction { 0.0f }, radius { 90.f }, 
+                exponent { 1.0f }, cutoff { 45.f }
    {}
 };
 
@@ -159,6 +171,55 @@ const glm::mat4 ENG_API &Eng::Light::getProjMatrix() const
    return reserved->projMatrix;
 }
 
+void ENG_API Eng::Light::setRadius(float radius)
+{
+   reserved->radius = radius;
+}
+
+const float ENG_API Eng::Light::getRadius() const
+{
+   return reserved->radius;
+}
+void ENG_API Eng::Light::setDirection(glm::vec3 direction)
+{
+   reserved->direction = direction;
+}
+
+const glm::vec3 ENG_API Eng::Light::getDirection() const
+{
+   return reserved->direction;
+}
+
+void ENG_API Eng::Light::setCutoff(float cutoff)
+{
+   reserved->cutoff = cutoff;
+}
+
+const float ENG_API Eng::Light::getCutoff() const
+{
+   return reserved->cutoff;
+}
+
+void ENG_API Eng::Light::setExponent(float exponent)
+{
+   reserved->exponent = exponent;
+}
+
+const float ENG_API Eng::Light::getExponent() const
+{
+   return reserved->exponent;
+}
+
+void ENG_API Eng::Light::setSubtype(uint8_t subtype)
+{
+   reserved->subtype = subtype;
+}
+
+const uint8_t ENG_API Eng::Light::getSubtype() const
+{
+   return reserved->subtype;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
@@ -196,18 +257,13 @@ uint32_t ENG_API Eng::Light::loadChunk(Eng::Serializer &serial, void *data)
    serial.deserialize(target);   
    
    // Data:
-   uint8_t subtype;
-   serial.deserialize(subtype);
-
+   serial.deserialize(reserved->subtype);
    serial.deserialize(reserved->color);
-   float radius;
-   serial.deserialize(radius);
-   glm::vec3 direction;
-   serial.deserialize(direction);
+   serial.deserialize(reserved->radius);
+   serial.deserialize(reserved->direction);
    float cutoff;
    serial.deserialize(cutoff);
-   float spotExponent;
-   serial.deserialize(spotExponent);
+   serial.deserialize(reserved->exponent);
    uint8_t castShadows;
    serial.deserialize(castShadows);
    uint8_t isVolumetric;
