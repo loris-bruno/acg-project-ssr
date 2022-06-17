@@ -332,7 +332,8 @@ void rayCasting(Ray ray, uint index)
       if (intersect(ray, hit))
       {
          // get and increase counter
-         uint newIndex = atomicCounterIncrement(counter);
+         //uint newIndex = atomicCounterIncrement(counter);
+         uint newIndex = index + nrOfRays;
          rayData[index].next = int(newIndex);
          index = newIndex;
 
