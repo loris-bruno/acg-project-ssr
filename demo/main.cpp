@@ -18,7 +18,7 @@
    #include <iostream>
 
 
-#define SCENE 0
+#define SCENE 1
  
 //////////   
 // VARS //
@@ -43,7 +43,7 @@
    const std::vector<std::string> scenes
    { 
        "simpler3dScene",
-       "Scene6"
+       "Scene7"
    };
 
 ///////////////
