@@ -18,7 +18,8 @@
    #include <iostream>
 
 
-
+#define SCENE 0
+ 
 //////////   
 // VARS //
 //////////
@@ -38,6 +39,12 @@
    Eng::PipelineRayTracing raytracingPipe;
 
    float roughnessThreshold = 0.25f;
+
+   const std::vector<std::string> scenes
+   { 
+       "simpler3dScene",
+       "Scene6"
+   };
 
 ///////////////
 // CALLBACKS //
@@ -137,41 +144,44 @@ void keyboardCallback(int key, int scancode, int action, int mods)
  * @param argv array containing up to argc passed arguments
  * @return error code (0 on success, error code otherwise)
  */
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
-   // Credits:
-   std::cout << "Engine demo, A. Peternier (C) SUPSI" << std::endl;
-   std::cout << std::endl;
+    // Credits:
+    std::cout << "Engine demo, A. Peternier (C) SUPSI" << std::endl;
+    std::cout << std::endl;
 
-   // Init engine:
-   Eng::Base &eng = Eng::Base::getInstance();
-   eng.init();
+    // Init engine:
+    Eng::Base& eng = Eng::Base::getInstance();
+    eng.init();
 
-   // Register callbacks:
-   eng.setMouseCursorCallback(mouseCursorCallback);
-   eng.setMouseButtonCallback(mouseButtonCallback);
-   eng.setMouseScrollCallback(mouseScrollCallback);
-   eng.setKeyboardCallback(keyboardCallback);
+    // Register callbacks:
+    eng.setMouseCursorCallback(mouseCursorCallback);
+    eng.setMouseButtonCallback(mouseButtonCallback);
+    eng.setMouseScrollCallback(mouseScrollCallback);
+    eng.setKeyboardCallback(keyboardCallback);
 
-   std::string outstring = "screen x: ";
-   outstring += std::to_string(eng.getWindowSize().x);
-   outstring += ", screen y: ";
-   outstring += std::to_string(eng.getWindowSize().y);
-   ENG_LOG_DEBUG(outstring.c_str());
+    std::string outstring = "screen x: ";
+    outstring += std::to_string(eng.getWindowSize().x);
+    outstring += ", screen y: ";
+    outstring += std::to_string(eng.getWindowSize().y);
+    ENG_LOG_DEBUG(outstring.c_str());
 
-   /////////////////
-   // Loading scene:   
-   Eng::Ovo ovo; 
-   std::reference_wrapper<Eng::Node> root = ovo.load("simpler3dScene.ovo");
-   std::cout << "Scene graph:\n" << root.get().getTreeAsString() << std::endl;
-   
-   // Get light ref:
-   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, .1f, 100.f)); // Perspective projection
-   dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002")).setProjMatrix(glm::perspective(glm::radians(150.f), 1.0f, .1f, 100.f));
-   
-   Eng::Light& light2 = dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002"));
-   light2.setCutoff(75.f);
-   light2.setSubtype(1);
+    /////////////////
+    // Loading scene:   
+    Eng::Ovo ovo;
+    std::reference_wrapper<Eng::Node> root = ovo.load(scenes[SCENE] + ".ovo");
+    std::cout << "Scene graph:\n" << root.get().getTreeAsString() << std::endl;
+
+    // Get light ref:
+    dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, .1f, 100.f)); // Perspective projection
+
+    if (Eng::Container::getInstance().find("Omni002") != Eng::Object::empty)
+    {
+        Eng::Light& light2 = dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002"));
+        light2.setProjMatrix(glm::perspective(glm::radians(150.f), 1.0f, .1f, 100.f));
+        light2.setCutoff(75.f);
+        light2.setSubtype(1);
+    }
 
 
    // Get torus knot ref:
