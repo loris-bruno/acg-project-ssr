@@ -467,10 +467,6 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
    reserved->rayBufferCounter.render(0);
    reserved->rayBufferCounter.reset();
 
-   int width = reserved->rayBufferIndexTex.getSizeX();
-   int height = reserved->rayBufferIndexTex.getSizeY();
-
-
    // Bind FBO and change OpenGL settings:
    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
    reserved->fbo.render();
