@@ -370,7 +370,7 @@ bool ENG_API Eng::PipelineDefault::render(const Eng::Camera &camera, const Eng::
    if (isWireframe())
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);      
 
-   reserved->geometryBuffer.render(viewMatrix, list);        
+   reserved->geometryBuffer.render(viewMatrix, list, 0.25f);        
 
    // Wireframe is on?
    if (isWireframe())
