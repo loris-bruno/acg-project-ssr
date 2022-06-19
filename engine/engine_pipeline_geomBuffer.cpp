@@ -84,6 +84,7 @@ layout (bindless_sampler) uniform sampler2D texture2; // Roughness
 layout (bindless_sampler) uniform sampler2D texture3; // Metalness
 
 uniform vec3 camPos;
+uniform float roughnessThreshold;
 
 // Varying:
 in vec4 fragPosition;
@@ -142,7 +143,7 @@ void main()
    albedoOut   = vec4(albedo_texel.xyz, roughness_texel.x);
    rayDataId = -1;   
 
-   if(roughness_texel.x > ROUGHNESS_THRESHOLD)
+   if(roughness_texel.x > roughnessThreshold)
          return;
       
    uint index = atomicCounterIncrement(counter);
@@ -422,7 +423,7 @@ bool ENG_API Eng::PipelineGeometry::free()
  * @param list list of renderables
  * @return TF
  */
-bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::List &list)
+bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::List &list, float roughessThreshold)
 {	
    // Safety net:
    if (list == Eng::List::empty)
@@ -451,6 +452,7 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
    }   
    program.render();    
    program.setMat4("projectionMat", Eng::Camera::getCached().getProjMatrix());
+   program.setFloat("roughnessThreshold", roughessThreshold);
    // program.setMat4("modelviewMat", viewMatrix);
    
    glm::mat4 camMat = Eng::Camera::getCached().getMatrix();
@@ -464,10 +466,6 @@ bool ENG_API Eng::PipelineGeometry::render(glm::mat4& viewMatrix, const Eng::Lis
    reserved->rayBuffer.render(0);
    reserved->rayBufferCounter.render(0);
    reserved->rayBufferCounter.reset();
-
-   int width = reserved->rayBufferIndexTex.getSizeX();
-   int height = reserved->rayBufferIndexTex.getSizeY();
-
 
    // Bind FBO and change OpenGL settings:
    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);

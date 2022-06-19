@@ -37,6 +37,8 @@
    Eng::PipelineFullscreenLighting lightingPipe;
    Eng::PipelineRayTracing raytracingPipe;
 
+   float roughnessThreshold = 0.25f;
+
 ///////////////
 // CALLBACKS //
 ///////////////
@@ -102,11 +104,26 @@ void mouseScrollCallback(double scrollX, double scrollY)
  */
 void keyboardCallback(int key, int scancode, int action, int mods)
 {
+    #define GLFW_KEY_DOWN      264
+    #define GLFW_KEY_UP        265 
    // ENG_LOG_DEBUG("key: %d, scancode: %d, action: %d, mods: %d", key, scancode, action, mods);
+    if (action == 0)
+        return;
    switch (key)
    {
+       case GLFW_KEY_UP:
+           if (roughnessThreshold < 1.0f) roughnessThreshold += 0.05f; 
+           
+           break;
+       case GLFW_KEY_DOWN: 
+           if (roughnessThreshold > 0.0f) roughnessThreshold -= 0.05f; 
+           break;
 
    }
+   std::string outstring = "\n\nRoughness threshold: ";
+   outstring += std::to_string(roughnessThreshold);
+   outstring += "\n\n";
+   ENG_LOG_DEBUG(outstring.c_str());
 }
 
 
@@ -136,15 +153,22 @@ int main(int argc, char *argv[])
    eng.setMouseScrollCallback(mouseScrollCallback);
    eng.setKeyboardCallback(keyboardCallback);
 
+   std::string outstring = "screen x: ";
+   outstring += std::to_string(eng.getWindowSize().x);
+   outstring += ", screen y: ";
+   outstring += std::to_string(eng.getWindowSize().y);
+   ENG_LOG_DEBUG(outstring.c_str());
+
    /////////////////
    // Loading scene:   
    Eng::Ovo ovo; 
-   std::reference_wrapper<Eng::Node> root = ovo.load("simpler3dScene.ovo");
+   std::reference_wrapper<Eng::Node> root = ovo.load("Simpler3dScene.ovo");
    std::cout << "Scene graph:\n" << root.get().getTreeAsString() << std::endl;
    
    // Get light ref:
    dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setProjMatrix(glm::perspective(glm::radians(75.f), 1.0f, .1f, 100.f)); // Perspective projection
    //dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setColor(glm::vec3(0));
+   //dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni001")).setColor(glm::vec3(2.0f, 2.0f, 2.0f));
    dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002")).setProjMatrix(glm::perspective(glm::radians(150.f), 1.0f, .1f, 100.f));
    
    Eng::Light& light2 = dynamic_cast<Eng::Light&>(Eng::Container::getInstance().find("Omni002"));
@@ -188,7 +212,7 @@ int main(int argc, char *argv[])
       glm::mat4 viewMatrix = glm::inverse(camera.getWorldMatrix());
 
       uint64_t start = Eng::Timer::getInstance().getCounter();
-      geometryPipe.render(viewMatrix, list);
+      geometryPipe.render(viewMatrix, list, roughnessThreshold);
       uint64_t end = Eng::Timer::getInstance().getCounter();
       double time = Eng::Timer::getInstance().getCounterDiff(start, end);
       std::string out = "Geometry pipeline time: ";
