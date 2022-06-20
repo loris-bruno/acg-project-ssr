@@ -70,6 +70,17 @@ public: //
       glm::vec3 rayDir;
       int32_t next;
    };
+
+
+   /**
+    * Workgroup count. Utility to calculate size of SSBO.
+    */
+   struct DispatchIndirectCommand
+   {
+      uint32_t  num_groups_x;
+      uint32_t  num_groups_y;
+      uint32_t  num_groups_z;
+   };
    
 
    // Const/dest:

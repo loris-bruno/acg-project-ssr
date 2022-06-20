@@ -64,6 +64,7 @@ public: //
 
    // Compute-only:
    bool compute(uint32_t sizeX, uint32_t sizeY = 1, uint32_t sizeZ = 1) const;
+   bool computeIndirect(uint64_t indirectDispatchCommandPtr) const;
    bool wait() const;
 
    // Cache:

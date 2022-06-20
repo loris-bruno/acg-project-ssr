@@ -582,6 +582,28 @@ bool ENG_API Eng::Program::compute(uint32_t sizeX, uint32_t sizeY, uint32_t size
    return true;
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Dispatch compute for a compute shader.
+ * @param sizeX workgroup size for X
+ * @param sizeY (optional) workgroup size for Y
+ * @param sizeZ (optional) workgroup size for Z
+ * @return TF
+ */
+bool ENG_API Eng::Program::computeIndirect(uint64_t indirectDispatchCommandPtr) const
+{
+   // TODO: check a compute shader is really attached
+
+   glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, indirectDispatchCommandPtr);
+
+   // Run kernel:
+   render();
+   glDispatchComputeIndirect(0);
+
+   // Done:
+   return true;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**

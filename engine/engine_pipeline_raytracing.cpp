@@ -33,7 +33,7 @@ static const std::string pipeline_cs = R"(
 #extension GL_ARB_gpu_shader_int64 : enable
 
 // This is the (hard-coded) workgroup size:
-layout (local_size_x = 1024) in;
+layout (local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 
 
@@ -47,6 +47,17 @@ layout (local_size_x = 1024) in;
    // #define CULLING                            // Back face culling enabled when defined
 
 
+struct DispatchIndirectCommand 
+{    
+   uint  num_groups_x;
+   uint  num_groups_y;
+   uint  num_groups_z;
+};
+   
+layout(shared, binding=5) buffer DispatchIndirectCommandData
+{     
+   DispatchIndirectCommand cmd;
+};
 
 ///////////////
 // TRIANGLES //
@@ -320,7 +331,7 @@ bool intersect(const Ray ray, out HitInfo info)
  * param ray primary ray
  * return color of the pixel's ray
  */
-void rayCasting(Ray ray, uint index)
+void rayCasting(Ray ray, uint index, uint nrOfRays)
 {
    HitInfo hit;   
    vec4 outputColor = vec4(0.0f);
@@ -364,7 +375,8 @@ void main()
 {   
 
    // Ray data index
-   uint index = gl_GlobalInvocationID.x;   
+   uint index = gl_GlobalInvocationID.x; 
+   uint nrOfRays = atomicCounter(counter);  
 
    // Avoid out of range values:
    if (index >= nrOfRays)   
@@ -376,7 +388,7 @@ void main()
    ray.dir = rayData[index].rayDir;    
 
    // Ray casting:
-   rayCasting(ray, index);
+   rayCasting(ray, index, nrOfRays);
 })";
 
 
@@ -697,22 +709,20 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
    reserved->materials.render(2);
    geometryPipe.getRayBuffer().render(3);
    geometryPipe.getRayBufferCounter().render(4);
-
-   uint32_t nrOfRays = geometryPipe.getRayBufferSize();
+   geometryPipe.getWorkgroupCount().render(5);
 
    // Uniforms:
    program.setUInt("nrOfBSpheres", reserved->nrOfMeshes);
-   program.setUInt("nrOfRays", nrOfRays);
 
    // Execute:
-   program.compute((nrOfRays / 1024.f) + 1);
+   program.computeIndirect(geometryPipe.getWorkgroupCount().getOglHandle());
    program.wait();
 
-   uint32_t rayBufferSize;
-   geometryPipe.getRayBufferCounter().read(&rayBufferSize);
-   std::string out = "Ray-triangle intersections: ";
-   out += std::to_string(rayBufferSize-nrOfRays);
-   ENG_LOG_DEBUG(out.c_str());
+   //uint32_t rayBufferSize;
+   //geometryPipe.getRayBufferCounter().read(&rayBufferSize);
+   //std::string out = "Ray-triangle intersections: ";
+   //out += std::to_string(rayBufferSize-nrOfRays);
+   //ENG_LOG_DEBUG(out.c_str());
 
    // Done:   
    return true;

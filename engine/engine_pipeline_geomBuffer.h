@@ -37,6 +37,7 @@ public: //
    const Eng::Ssbo& getRayBuffer() const;
    const uint32_t getRayBufferSize() const;
    const Eng::AtomicCounter& getRayBufferCounter() const;
+   const Eng::Ssbo& getWorkgroupCount() const;
 
    // Rendering methods:
    // bool render(uint32_t value = 0, void *data = nullptr) const = delete;
