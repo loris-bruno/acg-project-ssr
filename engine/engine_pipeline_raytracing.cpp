@@ -43,7 +43,7 @@ layout (local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
    #define K_EPSILON     1e-4f                // Tolerance around zero   
    #define FLT_MAX       3.402823466e+38f     // Max float value
-   #define NR_OF_BOUNCES 1                    // Number of bounces
+   #define NR_OF_BOUNCES 3                    // Number of bounces
    // #define CULLING                            // Back face culling enabled when defined
 
 
@@ -180,6 +180,7 @@ struct HitInfo
 
 // Uniforms:
 uniform uint nrOfBSpheres;
+uniform uint nrOfBounces;
 
 ///////////////
 // FUNCTIONS //
@@ -338,12 +339,12 @@ void rayCasting(Ray ray, uint index, uint nrOfRays)
 
    vec3 oldHitNormal = vec3(0.0f);
 
-   for (unsigned int c = 0; c < NR_OF_BOUNCES; c++)
+   for (unsigned int c = 0; c < nrOfBounces; c++)
       if (intersect(ray, hit))
       {
          // get and increase counter
-         //uint newIndex = atomicCounterIncrement(counter);
-         uint newIndex = index + nrOfRays;
+         uint newIndex = atomicCounterIncrement(counter);
+         //uint newIndex = index + nrOfRays;
          rayData[index].next = int(newIndex);
          index = newIndex;
 
@@ -374,15 +375,15 @@ void main()
 {   
 
    // Ray data index
-   uint index = gl_GlobalInvocationID.x; 
-   uint nrOfRays = atomicCounter(counter);  
+   uint index = gl_GlobalInvocationID.x;
+   uint nrOfRays = atomicCounter(counter);
 
    // Avoid out of range values:
-   if (index >= nrOfRays)   
-      return;  
+   if (index >= nrOfRays)
+      return;
 
-   // Primary ray tracing:
-   Ray ray;   
+   // Secondary ray casting:
+   Ray ray; 
    ray.origin = rayData[index].position;
    ray.dir = rayData[index].rayDir;    
 
@@ -673,7 +674,7 @@ bool ENG_API Eng::PipelineRayTracing::migrate(const Eng::List &list)
  * @param list list of renderables
  * @return TF
  */
-bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const Eng::List &list, const Eng::PipelineGeometry &geometryPipe)
+bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const Eng::List &list, const Eng::PipelineGeometry &geometryPipe, uint32_t nrOfBounces)
 {	
    // Safety net:
    if (camera == Eng::Camera::empty || list == Eng::List::empty)
@@ -681,6 +682,9 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
       ENG_LOG_ERROR("Invalid params");
       return false;
    }
+
+   if (nrOfBounces == 0)
+      return true;
 
    // Just to update the cache
    this->Eng::Pipeline::render(list); 
@@ -712,6 +716,7 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
 
    // Uniforms:
    program.setUInt("nrOfBSpheres", reserved->nrOfMeshes);
+   program.setUInt("nrOfBounces", nrOfBounces);
 
    // Execute:
    program.computeIndirect(geometryPipe.getWorkgroupCount().getOglHandle());

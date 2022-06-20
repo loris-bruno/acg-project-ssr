@@ -413,7 +413,7 @@ bool ENG_API Eng::PipelineGeometry::init()
    }
 
    // Allocate ray origin SSBO and counter:
-   reserved->rayBuffer.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y * 3);
+   reserved->rayBuffer.create(sizeof(Eng::PipelineRayTracing::RayStruct) * eng.getWindowSize().x * eng.getWindowSize().y * (1 + Eng::PipelineRayTracing::MAX_BOUNCES));
    reserved->rayBufferCounter.create(sizeof(GLuint));
    reserved->rayBufferCounter.reset();
 

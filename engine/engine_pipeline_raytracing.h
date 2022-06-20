@@ -94,12 +94,13 @@ public: //
 
    // Rendering methods:
    // bool render(uint32_t value = 0, void *data = nullptr) const = delete;
-   bool render(const Eng::Camera& camera, const Eng::List& list, const Eng::PipelineGeometry& geometryPipe);
+   bool render(const Eng::Camera& camera, const Eng::List& list, const Eng::PipelineGeometry& geometryPipe, uint32_t nrOfBounces);
    
    // Managed:
    bool init() override;
    bool free() override;
 
+   static const int MAX_BOUNCES = 4;
 
 /////////////
 protected: //

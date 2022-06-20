@@ -39,6 +39,7 @@
    Eng::PipelineRayTracing raytracingPipe;
 
    float roughnessThreshold = 0.25f;
+   uint32_t nrOfBounces = 1;
 
    const std::vector<std::string> scenes
    { 
@@ -125,7 +126,12 @@ void keyboardCallback(int key, int scancode, int action, int mods)
        case GLFW_KEY_DOWN: 
            if (roughnessThreshold > 0.0f) roughnessThreshold -= 0.05f; 
            break;
-
+       case '.':
+          if (nrOfBounces < Eng::PipelineRayTracing::MAX_BOUNCES) nrOfBounces += 1;
+          break;
+       case ',':
+          if (nrOfBounces > 0) nrOfBounces -= 1;
+          break;
    }
    std::string outstring = "\n\nRoughness threshold: ";
    outstring += std::to_string(roughnessThreshold);
@@ -240,7 +246,7 @@ int main(int argc, char* argv[])
       ENG_LOG_DEBUG(out.c_str());
       
       start = Eng::Timer::getInstance().getCounter();
-      raytracingPipe.render(camera, list, geometryPipe);
+      raytracingPipe.render(camera, list, geometryPipe, nrOfBounces);
       end = Eng::Timer::getInstance().getCounter();
       time = Eng::Timer::getInstance().getCounterDiff(start, end);
       totalTime += time;
