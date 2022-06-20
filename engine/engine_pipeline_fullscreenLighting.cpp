@@ -64,22 +64,56 @@ out vec4 outFragment;
 layout (bindless_sampler) uniform sampler2D texture0;
 layout (bindless_sampler) uniform sampler2D texture1;
 layout (bindless_sampler) uniform sampler2D texture2;
-layout (bindless_sampler) uniform sampler2D texture3;
+layout (bindless_sampler) uniform isampler2D texture3;
+uniform sampler2D shadowMaps[4];
+
+//////////////
+// RAY DATA //
+//////////////
+
+struct RayStruct {
+
+   vec3 position;
+   vec3 normal;
+   vec3 albedo;
+   float metalness;
+   float roughness;
+
+   vec3 rayDir;
+   int next;
+};
+
+layout(shared, binding=4) buffer RayData
+{
+   RayStruct rayData[];
+};
 
 // Uniforms:
 uniform vec3 camPos;          // Camera position in World-Space
-uniform vec3 lightPos;        // Light position in World-Space
-uniform vec3 lightCol;        // Light color
-uniform mat4 lightMatrix;     // Transformation into light space
+
+struct LightData {
+   vec3 position;
+   vec3 color;
+   mat4 matrix;
+   
+   int subtype;
+
+   vec3 direction;
+   float cutoff;
+};
+
+uniform uint nrOfLights;
+uniform LightData lightData[4];
 
 const float PI = 3.14159265359;
+
 
 /**
  * Computes the amount of shadow for a given fragment.
  * @param fragPosLightSpace frament coords in light space
  * @return shadow intensity
  */
-float shadowAmount(vec4 fragPosLightSpace)
+float shadowAmount(vec4 fragPosLightSpace, int lightNum)
 {
    // From "clip" to "ndc" coords:
    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
@@ -88,7 +122,7 @@ float shadowAmount(vec4 fragPosLightSpace)
    projCoords = projCoords * 0.5f + 0.5f;
    
    // Get closest depth in the shadow map:
-   float closestDepth = texture(texture3, projCoords.xy).r;    
+   float closestDepth = texture(shadowMaps[lightNum], projCoords.xy).r;    
 
    // Check whether current fragment is in shadow:
    return projCoords.z > closestDepth  ? 1.0f : 0.0f;   
@@ -124,7 +158,7 @@ float DistributionGGX(vec3 normal, vec3 halfvector, float roughness)
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-} 
+}
 
 
 /**
@@ -140,6 +174,97 @@ float evaluateGeometry(vec3 N, vec3 V, float alpha)
    return dot(N, V) / (dot(N, V) * (1.0f - k_direct) + k_direct);
 }
 
+vec3 computeFinalLighting(vec3 viewPos, vec4 pixPos, vec3 pixNorm, vec3 pixAlbedo, float pixMetal, float pixRough) {
+   vec3 color = pixAlbedo * .1f;       // hardcoded ambient term
+   vec3 viewDir = normalize(viewPos - pixPos.xyz);
+
+   if (dot(pixNorm, viewDir) < 0.0f){
+      return color;
+   }
+
+   for(int i = 0; i < nrOfLights; i++) {
+      vec3 lightDir = normalize(lightData[i].position.xyz - pixPos.xyz);
+         
+      if(lightData[i].subtype == 1) {
+         float theta = dot(lightDir, normalize(-lightData[i].direction));
+         if(theta < lightData[i].cutoff) continue;
+      }
+
+      vec3 halfVector = normalize(lightDir + viewDir);
+
+      float cosTheta = max(dot(pixNorm, viewDir), .0f);
+      vec3 F0 = mix(vec3(.04f), pixAlbedo, pixMetal);
+      vec3  F = fresnelSchlick(cosTheta, F0);
+      float G = evaluateGeometry(pixNorm, viewDir, pixRough);
+      float D = DistributionGGX(pixNorm, halfVector, pixRough);
+
+      float distance = length(pixPos.xyz - lightData[i].position.xyz);
+      float attenuation = 1000.f / (distance * distance);
+      vec3 radiance = lightData[i].color * attenuation;
+
+      vec3 kD = (vec3(1.f) - F) * (1.f - pixMetal);
+      vec3 lighting = kD * pixAlbedo / PI;
+      vec3 specular = D * G * F;
+      float denum = 4 * max(dot(pixNorm, viewDir), 0.f) * max(dot(pixNorm, lightDir), 0.f) + .0001f;
+   
+      specular /= denum;
+   
+      lighting += specular;
+      lighting *= radiance *  max(dot(pixNorm, lightDir), 0.f);
+      lighting = pow(lighting, vec3(1.f/2.2f));
+      
+      float shadow = shadowAmount(lightData[i].matrix * pixPos, i);
+
+      color += lighting * (1.f - shadow);
+   }
+   
+   return color;
+}
+
+vec3 computeRaycastedLighting(RayStruct ray) {
+   vec3 color = vec3(.0f);
+   vec3 viewPos = camPos;
+   uint nrOfBounces = 0;
+   while(ray.next != -1) {
+      vec3 color = ray.albedo * .1f;       // hardcoded ambient term
+      vec3 viewDir = normalize(viewPos - ray.position);
+
+      for(int i = 0; i < nrOfLights; i++) {
+         vec3 lightDir = normalize(lightData[i].position.xyz - ray.position);
+         
+         if(lightData[i].subtype == 1) {
+            float theta = dot(lightDir, normalize(-lightData[i].direction));
+            if(theta < lightData[i].cutoff) continue;
+         }
+
+         vec3 halfVector = normalize(lightDir + viewDir);
+
+         float cosTheta = max(dot(ray.normal, viewDir), .0f);
+         vec3 F0 = mix(vec3(.04f), ray.albedo, ray.metalness);
+         vec3  F = fresnelSchlick(cosTheta, F0);
+
+         float distance = length(ray.position - lightData[i].position.xyz);
+         float attenuation = 1000.f / (distance * distance);
+         vec3 radiance = lightData[i].color * attenuation;
+
+         vec3 kD = (vec3(1.f) - F) * (1.f - ray.metalness);
+         vec3 lighting = kD * ray.albedo / PI;
+         lighting *= radiance *  max(dot(ray.normal, lightDir), 0.f);
+         lighting = pow(lighting, vec3(1.f/2.2f));
+      
+         float shadow = shadowAmount(lightData[i].matrix * vec4(ray.position, 1.f), i);
+
+         nrOfBounces++;
+         color += (lighting * (1.f - shadow)) / nrOfBounces;
+      }
+      viewPos = ray.position;
+      ray = rayData[ray.next];
+   }
+   
+   color += computeFinalLighting(viewPos, vec4(ray.position, 1.0f), ray.normal, ray.albedo, ray.metalness, ray.roughness) / nrOfBounces;
+   
+   return color;
+}
 
 void main()
 {
@@ -147,50 +272,30 @@ void main()
    vec4 pixWorldPos     = texture(texture0, uv);
    vec4 pixWorldNormal  = texture(texture1, uv);
    vec4 pixMaterial     = texture(texture2, uv);
+   int rayId            = texture(texture3, uv).r;
 
-   vec3 color = pixMaterial.xyz * .3f;       // hardcoded ambient term
-
-
-   vec3 viewDir = normalize(camPos.xyz - pixWorldPos.xyz);
-   vec3 lightDir = normalize(lightPos.xyz - pixWorldPos.xyz);
-
+   vec3 color = vec3(0.0f);
    
-   if (dot(pixWorldNormal.xyz, viewDir.xyz) < 0.0f){
-      outFragment = vec4(color, 1.f);
-      return;
-   }
-
-   vec3 halfVector = normalize(lightDir + viewDir);
-   float cosTheta = max(dot(halfVector,viewDir), .0f);
-   vec3 F0 = mix(vec3(.04f), pixMaterial.rgb, pixWorldNormal.w);
-   
-   //float distance = length(pixWorldPos.xyz - lightPos.xyz);
-   //float attenuation = 1.f / (distance * distance);
-   float attenuation = 1.f;
-   vec3 radiance = lightCol * attenuation;
-
-   float D = DistributionGGX(pixWorldNormal.xyz, halfVector, pixMaterial.w);
-   vec3 F = fresnelSchlick(cosTheta, F0);
-   float G = evaluateGeometry(pixWorldNormal.rgb, viewDir.rgb, pixMaterial.w);
-
-   vec3 num = D * G * F;
-   float denum = 4 * max(dot(pixWorldNormal.rgb, viewDir.rgb), 0.f) * max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f) + .0001f;
-   
-   vec3 specular = num / denum;
-  
-   vec3 kD = vec3(1.f) - F;
-        kD *= 1.f - pixWorldNormal.w;
-   
-   vec3 lighting = (kD * pixMaterial.xyz / PI + specular) * radiance *  max(dot(pixWorldNormal.rgb, lightDir.rgb), 0.f);
-   lighting = pow(lighting, vec3(1.f/2.2f));
-      
-   float shadow = shadowAmount(lightMatrix * pixWorldPos);
-
-   color += lighting * (1.f - shadow);
-   //color += lighting;
-
-   outFragment = vec4(color.xyz, 1.0);
-})";
+   if(rayId == -1 || rayData[rayId].next == -1) {
+      color = computeFinalLighting(camPos, pixWorldPos, pixWorldNormal.xyz, pixMaterial.rgb, pixWorldNormal.w, pixMaterial.w);
+    } else {
+     color = computeRaycastedLighting(rayData[rayId]);
+    }
+   /*
+   if(rayId == -1)
+      color = vec3(1.f, 1.f, 1.f);
+   else if(rayData[rayId].next == -1)
+      color = vec3(1.f, 0.f, 0.f);
+   else if(rayData[rayData[rayId].next].next == -1)
+      color = vec3(0.f, 1.f, 0.f);
+   else if(rayData[rayData[rayData[rayId].next].next].next == -1)
+      color = vec3(0.f, 0.f, 1.f);
+   else
+      color = vec3(1.f, 1.f, 0.f);
+   */
+   outFragment = vec4(color.rgb, 1.0f);
+}
+)";
 
 
 
@@ -207,7 +312,6 @@ struct Eng::PipelineFullscreenLighting::Reserved
    Eng::Shader fs;
    Eng::Program program;      
    Eng::Vao vao;  ///< Dummy VAO, always required by context profiles
-
 
    /**
     * Constructor. 
@@ -297,6 +401,8 @@ bool ENG_API Eng::PipelineFullscreenLighting::init()
       return false;
    }
 
+   glm::ivec2 windowSize = Eng::Base::getInstance().getWindowSize();
+
    // Done: 
    this->setDirty(false);
    return true;
@@ -325,7 +431,7 @@ bool ENG_API Eng::PipelineFullscreenLighting::free()
  * @param list list of renderables
  * @return TF
  */
-bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry& geometries, const Eng::PipelineShadowMapping& shadowmap, Eng::Light& light, const Eng::List &list)
+bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry& geometries, const Eng::PipelineShadowMapping& shadowmap, const Eng::PipelineRayTracing& raytracing, const Eng::List &list)
 {	
    // Safety net:
    if (geometries.getPositionBuffer() == Eng::Texture::empty || geometries.getNormalBuffer() == Eng::Texture::empty || geometries.getMaterialBuffer() == Eng::Texture::empty || list == Eng::List::empty)
@@ -357,32 +463,61 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
    geometries.getPositionBuffer().render(0);
    geometries.getNormalBuffer().render(1);
    geometries.getMaterialBuffer().render(2);
-   shadowmap.getShadowMap().render(3);
+   geometries.getRayBufferIndexTexture().render(3);
+   geometries.getRayBuffer().render(4);
 
+   GLuint64 handles[4];
+
+   for (int i = 0; i < shadowmap.getShadowMapCount(); i++) {
+      handles[i] = shadowmap.getShadowMaps()[i].getOglBindlessHandle();
+   }
+   program.setUInt64Array("shadowMaps", handles, shadowmap.getShadowMapCount());
    
+
    glm::mat4 camMat = Eng::Camera::getCached().getMatrix();
    float x = camMat[3][0];
    float y = camMat[3][1];
    float z = camMat[3][2];
    glm::vec3 camPos = glm::vec3(x, y, z);
 
-   glm::mat4 lightMatrix = light.getMatrix();
-   x = lightMatrix[3][0];
-   y = lightMatrix[3][1];
-   z = lightMatrix[3][2];
-   glm::vec3 lightPos = glm::vec3(x, y, z);
-
    program.setVec3("camPos", camPos);
-   program.setVec3("lightPos", lightPos);
-   // program.setVec3("lightCol", glm::vec3(0.3f, 0.5f, 0.9f));
-   program.setVec3("lightCol", glm::vec3(0.7f, 0.75f, 0.79f));
+
+   // copy light data
+   for (int i = 0; i < list.getNrOfLights(); i++) {
+      const Eng::List::RenderableElem& lightRe = list.getRenderableElem(i);
+
+      if (dynamic_cast<const Eng::Light&>(lightRe.reference.get()) == Eng::Light::empty) {
+         ENG_LOG_ERROR("Invalid params");
+         return false;
+      }
+
+      const Eng::Light& light = dynamic_cast<const Eng::Light&>(lightRe.reference.get());
+
+      glm::mat4 lightMatrix = lightRe.matrix;
+      x = lightMatrix[3][0];
+      y = lightMatrix[3][1];
+      z = lightMatrix[3][2];
+      glm::vec3 lightPos = glm::vec3(x, y, z);
+
+      program.setVec3(std::string("lightData[") + std::to_string(i) + std::string("].position"), lightPos);
+      program.setVec3(std::string("lightData[") + std::to_string(i) + std::string("].color"), light.getColor());
+      program.setInt(std::string("lightData[") + std::to_string(i) + std::string("].subtype"), light.getSubtype());
+      program.setFloat(std::string("lightData[") + std::to_string(i) + std::string("].cutoff"), glm::cos(glm::radians(light.getCutoff())));
 
 
-   glm::mat4 lpm = light.getProjMatrix();
-   glm::mat4 lvm = glm::inverse( lightMatrix );
-   glm::mat4 lightFinalMatrix = lpm* lvm; // lvm; // To convert from eye coords into light space
-   program.setMat4("lightMatrix", lightFinalMatrix);
+      glm::mat4 lpm = light.getProjMatrix();
+      glm::mat4 lvm = glm::inverse(lightMatrix);
+      glm::mat4 lightFinalMatrix = lpm * lvm; // lvm; // To convert from eye coords into light space
+      program.setMat4(std::string("lightData[") + std::to_string(i) + std::string("].matrix"), lightFinalMatrix);
 
+      x = lvm[2][0];
+      y = lvm[2][1];
+      z = lvm[2][2];
+      glm::vec3 lightDir = glm::vec3(x, y, z);
+      program.setVec3(std::string("lightData[") + std::to_string(i) + std::string("].direction"), lightDir);
+   }
+
+   program.setUInt("nrOfLights", list.getNrOfLights());
 
    Eng::Base &eng = Eng::Base::getInstance();
    Eng::Fbo::reset(eng.getWindowSize().x, eng.getWindowSize().y);   
@@ -390,7 +525,7 @@ bool ENG_API Eng::PipelineFullscreenLighting::render(const Eng::PipelineGeometry
    // Smart trick:   
    reserved->vao.render();
    glDrawArrays(GL_TRIANGLES, 0, 3);
-  
+
    // Done:   
    return true;
 }

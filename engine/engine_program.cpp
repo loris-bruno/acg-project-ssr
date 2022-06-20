@@ -336,6 +336,41 @@ int32_t ENG_API Eng::Program::getParamLocation(const std::string &name)
    return location->second;
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Get parameter location given its name.
+ * @param name variable name
+ * @return param location or -1 if not found
+ */
+int32_t ENG_API Eng::Program::getParamLocationARB(const std::string& name)
+{
+   // Safety net:
+   if (name.empty())
+   {
+      ENG_LOG_ERROR("Invalid params");
+      return -1;
+   }
+
+   this->render();
+
+   // Use or add?
+   auto location = reserved->location.find(name);
+   if (location == reserved->location.end())
+   {
+      GLint position = glGetUniformLocationARB(reserved->oglId, name.c_str());
+      if (position == -1)
+      {
+         ENG_LOG_WARN("Variable '%s' not found", name.c_str());
+         // return false;
+      }
+      reserved->location.insert(std::make_pair(name, position));
+      location = reserved->location.find(name);
+   }
+
+   // Done:      
+   return location->second;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
@@ -487,6 +522,24 @@ bool ENG_API Eng::Program::setMat4(const std::string &name, const glm::mat4 &val
    return true;
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Set a uniform value of type mat4.
+ * @param name variable name
+ * @param value variable value
+ * @return TF
+ */
+bool ENG_API Eng::Program::setUInt64Array(const std::string& name, const uint64_t* value, const uint32_t count)
+{
+   GLint location = getParamLocationARB(name);
+   if (location == -1)
+      return false;
+
+   // Done:
+   glUniformHandleui64vARB(location, count, value);
+   return true;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
@@ -524,6 +577,28 @@ bool ENG_API Eng::Program::compute(uint32_t sizeX, uint32_t sizeY, uint32_t size
    // Run kernel:
    render();
    glDispatchCompute(sizeX, sizeY, sizeZ);
+
+   // Done:
+   return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Dispatch compute for a compute shader.
+ * @param sizeX workgroup size for X
+ * @param sizeY (optional) workgroup size for Y
+ * @param sizeZ (optional) workgroup size for Z
+ * @return TF
+ */
+bool ENG_API Eng::Program::computeIndirect(uint64_t indirectDispatchCommandPtr) const
+{
+   // TODO: check a compute shader is really attached
+
+   glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, indirectDispatchCommandPtr);
+
+   // Run kernel:
+   render();
+   glDispatchComputeIndirect(0);
 
    // Done:
    return true;

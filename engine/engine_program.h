@@ -53,6 +53,7 @@ public: //
    bool setVec4(const std::string &name, const glm::vec4 &value);
    bool setMat3(const std::string &name, const glm::mat3 &value);
    bool setMat4(const std::string &name, const glm::mat4 &value);
+   bool setUInt64Array(const std::string &name, const uint64_t* data, uint32_t count);
 
    // Building:
    bool build(std::initializer_list<std::reference_wrapper<Eng::Shader>> args);
@@ -63,6 +64,7 @@ public: //
 
    // Compute-only:
    bool compute(uint32_t sizeX, uint32_t sizeY = 1, uint32_t sizeZ = 1) const;
+   bool computeIndirect(uint64_t indirectDispatchCommandPtr) const;
    bool wait() const;
 
    // Cache:
@@ -88,6 +90,7 @@ private: //
    Program(const std::string &name);
 
    // Get/set:
-   int32_t getParamLocation(const std::string &name);   
+   int32_t getParamLocation(const std::string& name);
+   int32_t getParamLocationARB(const std::string& name);
 };
 

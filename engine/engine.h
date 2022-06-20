@@ -67,6 +67,7 @@ namespace Eng {
 
    // Logging:
    #include "engine_log.h"
+   #include "engine_timer.h"
 
    // Architecture:
    #include "engine_object.h"
@@ -87,6 +88,7 @@ namespace Eng {
    #include "engine_material.h"
    #include "engine_fbo.h"
    #include "engine_ssbo.h"
+   #include "engine_atomic_counter.h"
 
    // Scene-graph elems:
    #include "engine_node.h"

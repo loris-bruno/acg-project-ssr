@@ -44,14 +44,15 @@ public: //
     */
    enum class Format : uint32_t
    {
-      none,
+       none,
 
-      // Uncompressed formats:
-      r8g8b8a8,
-      r8g8b8,
-      rgb_float,
-      rgba_float,
-      
+       // Uncompressed formats:
+       r8g8b8a8,
+       r8g8b8,
+       rgb_float,
+       rgba_float,
+       r32_int,
+
       // Compressed formats:
       r8g8b8_compressed,
       r8g8b8a8_compressed,
@@ -67,8 +68,8 @@ public: //
    
 
    // Const/dest:
-	Texture();      
-	Texture(Texture &&other);
+   Texture();      
+   Texture(Texture &&other);
    Texture(Texture const&) = delete;   
    Texture(const Eng::Bitmap &bitmap);
    virtual ~Texture();  

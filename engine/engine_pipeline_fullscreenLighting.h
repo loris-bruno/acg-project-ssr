@@ -26,7 +26,7 @@ public: //
 
    // Rendering methods:
    // bool render(uint32_t value = 0, void *data = nullptr) const = delete;
-   bool render(const Eng::PipelineGeometry& geometries, const Eng::PipelineShadowMapping& shadowmap, Eng::Light& light, const Eng::List &list);
+   bool render(const Eng::PipelineGeometry& geometries, const Eng::PipelineShadowMapping& shadowmap, const Eng::PipelineRayTracing& raytracing, const Eng::List &list);
    
    // Managed:
    bool init() override;

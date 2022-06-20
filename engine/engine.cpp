@@ -121,6 +121,8 @@ static std::string FormatDebugOutput(GLenum source, GLenum type, GLuint id, GLen
  */
 static void __stdcall DebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, GLvoid *userParam)
 {
+   if (type == GL_DEBUG_TYPE_OTHER) return;
+
    std::string error = FormatDebugOutput(source, type, id, severity, message);
    if (type == GL_DEBUG_TYPE_ERROR)
    {
@@ -290,9 +292,12 @@ bool ENG_API Eng::Base::init()
    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &workGroupCounts[0]);
    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &workGroupCounts[1]);
    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &workGroupCounts[2]);
+   int workGroupInvocations;
+   glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &workGroupInvocations);
 
    ENG_LOG_PLAIN("   Max group sz :  %d, %d, %d", workGroupSizes[0], workGroupSizes[1], workGroupSizes[2]);
    ENG_LOG_PLAIN("   Max group cnt:  %d, %d, %d", workGroupCounts[0], workGroupCounts[1], workGroupCounts[2]);
+   ENG_LOG_PLAIN("   Max group invocations:  %d", workGroupInvocations);
 
    float maxAnisotropy = 0.0f;
    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maxAnisotropy);
