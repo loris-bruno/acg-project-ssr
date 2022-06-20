@@ -31,7 +31,7 @@
    float transZ = 50.0f;
 
    // Pipelines:
-   Eng::PipelineDefault dfltPipe;
+   //Eng::PipelineDefault dfltPipe;
    Eng::PipelineShadowMapping shadowPipe;
    Eng::PipelineGeometry geometryPipe;
    Eng::PipelineFullscreen2D full2dPipe;

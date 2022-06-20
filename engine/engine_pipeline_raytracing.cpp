@@ -43,21 +43,8 @@ layout (local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
    #define K_EPSILON     1e-4f                // Tolerance around zero   
    #define FLT_MAX       3.402823466e+38f     // Max float value
-   #define NR_OF_BOUNCES 3                    // Number of bounces
    // #define CULLING                            // Back face culling enabled when defined
 
-
-struct DispatchIndirectCommand 
-{    
-   uint  num_groups_x;
-   uint  num_groups_y;
-   uint  num_groups_z;
-};
-   
-layout(shared, binding=5) buffer DispatchIndirectCommandData
-{     
-   DispatchIndirectCommand cmd;
-};
 
 ///////////////
 // TRIANGLES //
@@ -331,7 +318,7 @@ bool intersect(const Ray ray, out HitInfo info)
  * param ray primary ray
  * return color of the pixel's ray
  */
-void rayCasting(Ray ray, uint index, uint nrOfRays)
+void rayCasting(Ray ray, uint index)
 {
    HitInfo hit;   
    vec4 outputColor = vec4(0.0f);
@@ -344,7 +331,6 @@ void rayCasting(Ray ray, uint index, uint nrOfRays)
       {
          // get and increase counter
          uint newIndex = atomicCounterIncrement(counter);
-         //uint newIndex = index + nrOfRays;
          rayData[index].next = int(newIndex);
          index = newIndex;
 
@@ -388,7 +374,7 @@ void main()
    ray.dir = rayData[index].rayDir;    
 
    // Ray casting:
-   rayCasting(ray, index, nrOfRays);
+   rayCasting(ray, index);
 })";
 
 
@@ -712,7 +698,6 @@ bool ENG_API Eng::PipelineRayTracing::render(const Eng::Camera &camera, const En
    reserved->materials.render(2);
    geometryPipe.getRayBuffer().render(3);
    geometryPipe.getRayBufferCounter().render(4);
-   geometryPipe.getWorkgroupCount().render(5);
 
    // Uniforms:
    program.setUInt("nrOfBSpheres", reserved->nrOfMeshes);

@@ -169,7 +169,7 @@ void main()
    rayData[index].next = -1;
 
    uint max = max(index, atomicCounter(counter));
-   cmd.num_groups_x = max / 64;
+   cmd.num_groups_x = int(max / 64.f) + 1;
    cmd.num_groups_y = 1;
    cmd.num_groups_z = 1;
 })";
