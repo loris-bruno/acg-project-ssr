@@ -49,6 +49,8 @@ public: //
 
    // Rendering methods:   
    bool render(uint32_t value = 0, void* data = nullptr) const;
+   void wait();
+
 
    // Managed:
    bool init() override;
