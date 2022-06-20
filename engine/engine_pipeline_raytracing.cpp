@@ -178,9 +178,8 @@ struct HitInfo
 // IN/OUT //
 ////////////
 
-   // Uniforms:
-   uniform uint nrOfBSpheres;
-   uniform uint nrOfRays;
+// Uniforms:
+uniform uint nrOfBSpheres;
 
 ///////////////
 // FUNCTIONS //

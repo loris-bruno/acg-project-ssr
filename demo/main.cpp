@@ -18,7 +18,7 @@
    #include <iostream>
 
 
-#define SCENE 1
+#define SCENE 0
  
 //////////   
 // VARS //
@@ -223,6 +223,7 @@ int main(int argc, char* argv[])
       geometryPipe.render(viewMatrix, list, roughnessThreshold);
       uint64_t end = Eng::Timer::getInstance().getCounter();
       double time = Eng::Timer::getInstance().getCounterDiff(start, end);
+      double totalTime = time;
       std::string out = "Geometry pipeline time: ";
       out += std::to_string(time);
       out += "ms";
@@ -232,6 +233,7 @@ int main(int argc, char* argv[])
       raytracingPipe.migrate(list);
       end = Eng::Timer::getInstance().getCounter();
       time = Eng::Timer::getInstance().getCounterDiff(start, end);
+      totalTime += time;
       out = "Raytracing migrate time: ";
       out += std::to_string(time);
       out += "ms";
@@ -241,6 +243,7 @@ int main(int argc, char* argv[])
       raytracingPipe.render(camera, list, geometryPipe);
       end = Eng::Timer::getInstance().getCounter();
       time = Eng::Timer::getInstance().getCounterDiff(start, end);
+      totalTime += time;
       out = "Raytracing pipeline time: ";
       out += std::to_string(time);
       out += "ms";
@@ -263,11 +266,18 @@ int main(int argc, char* argv[])
       lightingPipe.render(geometryPipe, shadowPipe, raytracingPipe, list);
       end = Eng::Timer::getInstance().getCounter();
       time = Eng::Timer::getInstance().getCounterDiff(start, end);
+      totalTime += time;
       out = "Shading pipeline time: ";
       out += std::to_string(time);
       out += "ms";
       ENG_LOG_DEBUG(out.c_str());
 
+      out = "Total frame time: ";
+      out += std::to_string(totalTime);
+      out += "ms (";
+      out += std::to_string(1000 / totalTime);
+      out += " FPS)";
+      ENG_LOG_DEBUG(out.c_str());
 
       eng.swap();
    }
